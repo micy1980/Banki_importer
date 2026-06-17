@@ -6,3 +6,8 @@ env/
 .env
 .DS_Store
 *.log
+settings.json
+companies.json
+own_accounts.json
+partners.json
+bank_registry.json
