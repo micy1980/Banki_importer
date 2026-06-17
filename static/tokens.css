@@ -644,3 +644,272 @@ html.theme-dark .row-highlight { background:rgba(217,119,6,.2) !important; }
     width: 100%;
   }
 }
+
+/* ============ Dark mode contrast repair ============ */
+html.theme-dark {
+  --bg: #080d1a;
+  --surface: #121a2e;
+  --surface-2: #18213b;
+  --surface-3: #202b4a;
+  --ink-900: #f8fafc;
+  --ink-700: #dbe5f2;
+  --ink-500: #aab8cc;
+  --ink-300: #71809a;
+  --ink-200: #34405d;
+  --ink-100: #263149;
+  --ink-50: #1a2339;
+}
+
+html.theme-dark,
+html.theme-dark body {
+  background: var(--bg);
+  color: var(--ink-900);
+}
+
+html.theme-dark .shell > header,
+html.theme-dark .commandbar,
+html.theme-dark .panel,
+html.theme-dark dialog,
+html.theme-dark help-dialog dialog,
+html.theme-dark import-dialog dialog,
+html.theme-dark companies-dialog dialog,
+html.theme-dark accounts-dialog dialog,
+html.theme-dark partners-dialog dialog,
+html.theme-dark account-edit-dialog dialog,
+html.theme-dark partner-edit-dialog dialog,
+html.theme-dark dialog.preview-dialog,
+html.theme-dark dialog#partnersDialog,
+html.theme-dark dialog#accountsDialog,
+html.theme-dark dialog#companiesDialog,
+html.theme-dark dialog#exportSummaryDialog,
+html.theme-dark dialog#diffDialog,
+html.theme-dark .account-card,
+html.theme-dark .metric,
+html.theme-dark .empty-state,
+html.theme-dark .sample-wrap,
+html.theme-dark .list-filter,
+html.theme-dark .bulk-bar,
+html.theme-dark .import-profiles .profile-row,
+html.theme-dark .dropzone,
+html.theme-dark .cmd-palette {
+  background: var(--surface);
+  border-color: var(--ink-200);
+  color: var(--ink-900);
+}
+
+html.theme-dark .command-summary,
+html.theme-dark .panel > h2,
+html.theme-dark .dialog-head,
+html.theme-dark .dialog-header,
+html.theme-dark .dialog-footer,
+html.theme-dark help-dialog .dialog-header,
+html.theme-dark help-dialog .dialog-footer,
+html.theme-dark dialog.preview-dialog .dialog-head,
+html.theme-dark dialog#partnersDialog .dialog-head,
+html.theme-dark dialog#accountsDialog .dialog-head,
+html.theme-dark dialog#companiesDialog .dialog-head,
+html.theme-dark dialog#exportSummaryDialog .dialog-head,
+html.theme-dark dialog#diffDialog .dialog-head {
+  background: var(--surface-2);
+  border-color: var(--ink-200);
+  color: var(--ink-900);
+}
+
+html.theme-dark .dialog-body,
+html.theme-dark .dialog-form,
+html.theme-dark help-dialog .dialog-body,
+html.theme-dark import-dialog .dialog-body,
+html.theme-dark companies-dialog .dialog-body,
+html.theme-dark accounts-dialog .dialog-body,
+html.theme-dark partners-dialog .dialog-body,
+html.theme-dark account-edit-dialog .dialog-body,
+html.theme-dark partner-edit-dialog .dialog-body,
+html.theme-dark dialog#partnersDialog .dialog-body,
+html.theme-dark dialog#accountsDialog .dialog-body,
+html.theme-dark dialog#companiesDialog .dialog-body,
+html.theme-dark dialog#exportSummaryDialog .dialog-body,
+html.theme-dark .preview-dialog .dialog-body {
+  background: var(--surface);
+  color: var(--ink-900);
+}
+
+html.theme-dark h1,
+html.theme-dark h2,
+html.theme-dark h3,
+html.theme-dark h4,
+html.theme-dark label,
+html.theme-dark .panel > h2,
+html.theme-dark .dialog-head h2,
+html.theme-dark .account-card h3,
+html.theme-dark .account-row strong,
+html.theme-dark dialog#partnersDialog .account-card h3,
+html.theme-dark dialog#accountsDialog .account-card h3,
+html.theme-dark dialog#companiesDialog .account-card h3,
+html.theme-dark .metric strong,
+html.theme-dark .empty-state strong,
+html.theme-dark .empty-state h3,
+html.theme-dark .help-grid strong,
+html.theme-dark .help-grid li,
+html.theme-dark .dialog-header h2 {
+  color: var(--ink-900);
+}
+
+html.theme-dark p,
+html.theme-dark span,
+html.theme-dark .hint,
+html.theme-dark .muted-small,
+html.theme-dark .map-help,
+html.theme-dark .command-summary #statusBox,
+html.theme-dark .metric span,
+html.theme-dark .empty-state p,
+html.theme-dark .empty-state span,
+html.theme-dark .empty-state ol,
+html.theme-dark .help-grid p,
+html.theme-dark .help-grid code,
+html.theme-dark .account-row span,
+html.theme-dark .bulk-count,
+html.theme-dark .list-filter__meta,
+html.theme-dark .validation-line,
+html.theme-dark .status {
+  color: var(--ink-500);
+}
+
+html.theme-dark input[type="text"],
+html.theme-dark input[type="number"],
+html.theme-dark input[type="date"],
+html.theme-dark input[type="file"],
+html.theme-dark input[type="search"],
+html.theme-dark select,
+html.theme-dark textarea,
+html.theme-dark .combobox-input {
+  background: #1b2541;
+  border-color: var(--ink-200);
+  color: var(--ink-900);
+}
+
+html.theme-dark input::placeholder,
+html.theme-dark textarea::placeholder,
+html.theme-dark .combobox-input::placeholder {
+  color: #8796ad;
+  opacity: 1;
+}
+
+html.theme-dark input[type="file"]::file-selector-button {
+  background: var(--surface-3);
+  color: var(--ink-900);
+  border: 1px solid var(--ink-200);
+}
+
+html.theme-dark button.secondary,
+html.theme-dark .button-link.secondary,
+html.theme-dark button.ghost,
+html.theme-dark .button-link.ghost,
+html.theme-dark .lang-toggle {
+  background: var(--surface-2);
+  border-color: var(--ink-200);
+  color: var(--ink-900) !important;
+}
+
+html.theme-dark button.secondary:hover,
+html.theme-dark .button-link.secondary:hover,
+html.theme-dark button.ghost:hover,
+html.theme-dark .button-link.ghost:hover,
+html.theme-dark .lang-toggle:hover {
+  background: var(--surface-3);
+  color: var(--ink-900) !important;
+}
+
+html.theme-dark button[disabled],
+html.theme-dark .button-link[aria-disabled="true"] {
+  opacity: .62 !important;
+  color: var(--ink-500) !important;
+}
+
+html.theme-dark #previewBox,
+html.theme-dark #previewBoxFull {
+  background: #0b1020 !important;
+  color: #e5edf8 !important;
+  border-color: var(--ink-200) !important;
+}
+
+html.theme-dark .sample-wrap table,
+html.theme-dark .sample-wrap th,
+html.theme-dark .sample-wrap td {
+  color: var(--ink-700);
+  background: transparent;
+  border-color: var(--ink-200);
+}
+
+html.theme-dark .sample-wrap thead th,
+html.theme-dark .sample-wrap tbody tr:nth-child(even) td,
+html.theme-dark .account-row,
+html.theme-dark .table--cards-on-mobile tr {
+  background: var(--surface-2);
+}
+
+html.theme-dark .help-grid section,
+html.theme-dark .account-row,
+html.theme-dark .table--cards-on-mobile tr {
+  border-color: var(--ink-200);
+}
+
+html.theme-dark .dropzone:hover,
+html.theme-dark .dropzone--over {
+  background: rgba(37, 99, 235, .14);
+  border-color: #60a5fa;
+  color: #bfdbfe;
+}
+
+html.theme-dark .dropzone:hover span,
+html.theme-dark .dropzone--over span {
+  color: #bfdbfe;
+}
+
+html.theme-dark .status.ok {
+  background: rgba(22, 163, 74, .14);
+  border-color: rgba(22, 163, 74, .35);
+  color: #86efac;
+}
+
+html.theme-dark .status.warn {
+  background: rgba(217, 119, 6, .14);
+  border-color: rgba(217, 119, 6, .35);
+  color: #fdba74;
+}
+
+html.theme-dark .status.bad,
+html.theme-dark .error-list {
+  background: rgba(220, 38, 38, .14) !important;
+  border-color: rgba(220, 38, 38, .4) !important;
+  color: #fecaca !important;
+}
+
+html.theme-dark .field-help-btn {
+  background: var(--surface-3);
+  border-color: var(--ink-200);
+  color: var(--ink-700);
+}
+
+html.theme-dark .field-help-btn:hover {
+  background: rgba(37, 99, 235, .2);
+  border-color: #60a5fa;
+  color: #bfdbfe;
+}
+
+html.theme-dark .badge {
+  background: var(--surface-3);
+  border-color: var(--ink-200);
+  color: var(--ink-700);
+}
+
+html.theme-dark .status-pill.warn {
+  background: rgba(217, 119, 6, .14);
+  color: #fdba74;
+  border-color: rgba(217, 119, 6, .35);
+}
+
+html.theme-dark .status-pill.ok {
+  background: rgba(22, 163, 74, .14);
+  color: #86efac;
+  border-color: rgba(22, 163, 74, .35);
+}
