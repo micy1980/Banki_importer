@@ -2380,6 +2380,21 @@ def refresh_bank_registry() -> dict[str, Any]:
     return write_json_file(BANK_REGISTRY_FILE, parsed)
 
 
+def bank_registry_response(registry: dict[str, Any], *, status: str | None = None, error: str = "") -> dict[str, Any]:
+    rows = registry.get("rows", []) or []
+    payload = {
+        **registry,
+        "row_count": len(rows),
+        "rows_loaded": bool(rows),
+        "sample": rows[:8],
+    }
+    if status:
+        payload["status"] = status
+    if error:
+        payload["error"] = error
+    return payload
+
+
 def refresh_bank_registry_at_startup() -> dict[str, Any]:
     previous = load_bank_registry()
     try:
@@ -2875,12 +2890,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/bank-registry":
             registry = load_bank_registry()
-            rows = registry.get("rows", [])
-            json_response(self, {
-                **registry,
-                "row_count": len(rows),
-                "sample": rows[:8],
-            })
+            json_response(self, bank_registry_response(registry))
             return
         if path == "/template.xlsx":
             params = parse_qs(parsed.query)
@@ -3035,9 +3045,16 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, save_bank_registry(read_json_body(self)))
                 return
             if post_path == "/api/bank-registry/refresh":
-                registry = refresh_bank_registry()
-                rows = registry.get("rows", [])
-                json_response(self, {**registry, "row_count": len(rows), "sample": rows[:8]})
+                try:
+                    read_json_body(self)
+                except Exception:
+                    pass
+                try:
+                    registry = refresh_bank_registry()
+                    json_response(self, bank_registry_response(registry, status="ok"))
+                except Exception as exc:
+                    registry = load_bank_registry()
+                    json_response(self, bank_registry_response(registry, status="stale", error=str(exc)))
                 return
             if post_path == "/api/inspect":
                 form = get_upload(self)

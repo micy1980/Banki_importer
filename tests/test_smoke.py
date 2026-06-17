@@ -13,6 +13,7 @@ or  python tests/test_smoke.py
 from __future__ import annotations
 
 import os
+import json
 import socket
 import subprocess
 import sys
@@ -130,6 +131,10 @@ class SmokeTest(unittest.TestCase):
                 self.assertEqual(status, 200, f"{path} -> {status}")
                 self.assertIn("application/json", ctype)
                 self.assertTrue(body.startswith(b"{") or body.startswith(b"["))
+                if path == "/api/bank-registry":
+                    payload = json.loads(body.decode("utf-8"))
+                    self.assertIn("row_count", payload)
+                    self.assertIn("rows_loaded", payload)
 
     def test_excel_template_downloads(self) -> None:
         status, body, ctype = _http_get("/template.xlsx")
