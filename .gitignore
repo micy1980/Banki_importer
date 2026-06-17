@@ -11,3 +11,7 @@ companies.json
 own_accounts.json
 partners.json
 bank_registry.json
+_trash.json
+_audit.jsonl
+_audit.jsonl.1
+_schema_version.json

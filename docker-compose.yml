@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  banki:
+    build: .
+    container_name: banki-txt-konverter
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # persist mutable JSON state outside the container
+      - ./data:/app/data
+      - ./companies.json:/app/companies.json
+      - ./own_accounts.json:/app/own_accounts.json
+      - ./partners.json:/app/partners.json
+      - ./bank_registry.json:/app/bank_registry.json
+      - ./_trash.json:/app/_trash.json
+      - ./_audit.jsonl:/app/_audit.jsonl
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/healthz', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

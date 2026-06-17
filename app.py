@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import logging
+import os
+
 import csv
+from email.parser import BytesParser
+from email.policy import default as email_policy
 import html
 import io
 import json
@@ -9,6 +14,7 @@ import urllib.request
 import uuid
 import unicodedata
 import xml.etree.ElementTree as ET
+import zipfile
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from http import HTTPStatus
@@ -18,7 +24,6 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 from xml.dom import minidom
 
-import cgi
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
@@ -29,6 +34,20 @@ SETTINGS_FILE = Path(__file__).with_name("settings.json")
 ACCOUNTS_FILE = Path(__file__).with_name("own_accounts.json")
 COMPANIES_FILE = Path(__file__).with_name("companies.json")
 PARTNERS_FILE = Path(__file__).with_name("partners.json")
+TRASH_FILE = Path(__file__).with_name("_trash.json")
+AUDIT_FILE = Path(__file__).with_name("_audit.jsonl")
+
+# --- Iteration 7: configurable runtime + schema versioning ---
+SCHEMA_VERSION_FILE = Path(__file__).with_name("_schema_version.json")
+CURRENT_SCHEMA_VERSION = 2
+MNB_REFRESH_HOURS = float(os.environ.get("BANKI_MNB_REFRESH_HOURS", "24"))
+AUDIT_MAX_LINES = int(os.environ.get("BANKI_AUDIT_MAX_LINES", "20000"))
+LOG_LEVEL = os.environ.get("BANKI_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("banki")
 BANK_REGISTRY_FILE = Path(__file__).with_name("bank_registry.json")
 
 FIELDS = {
@@ -821,478 +840,13 @@ HTML_PAGE = r"""<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Banki TXT konverter</title>
-  <style>
-    :root {
-      --bg: #f3f5f8;
-      --surface: #ffffff;
-      --surface-2: #f8fafc;
-      --ink: #162033;
-      --muted: #475569;
-      --line: #d9e1ec;
-      --line-strong: #c9d3df;
-      --accent: #a3192c;
-      --accent-dark: #841623;
-      --accent-soft: #fff1f3;
-      --accent-2: #0f766e;
-      --accent-2-soft: #edf9f6;
-      --warn: #9a6400;
-      --bad: #b42331;
-      --bad-soft: #fff3f4;
-      --shadow: 0 18px 44px rgba(17, 24, 39, 0.08);
-      --shadow-soft: 0 8px 24px rgba(17, 24, 39, 0.06);
-      font-family: Inter, Segoe UI, system-ui, -apple-system, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      background: var(--bg);
-      font-size: 14px;
-    }
-    .shell { width: 100%; max-width: none; margin: 0; padding: 22px clamp(16px, 3vw, 40px) 36px; }
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      padding: 4px 0 22px;
-    }
-    h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: 0; line-height: 1.08; }
-    p { margin: 0; color: var(--muted); line-height: 1.45; }
-    .eyebrow {
-      color: var(--accent);
-      font-weight: 800;
-      font-size: 12px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      margin-bottom: 7px;
-    }
-    .header-meta {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .badge, .status-pill {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #fff;
-      padding: 10px 12px;
-      color: #475569;
-      font-size: 13px;
-      font-weight: 650;
-      white-space: nowrap;
-      box-shadow: var(--shadow-soft);
-    }
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      box-shadow: none;
-    }
-    .status-pill::before {
-      content: "";
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--muted);
-    }
-    .status-pill.ok { color: var(--accent-2); border-color: rgba(15,118,110,.28); background: var(--accent-2-soft); }
-    .status-pill.ok::before { background: var(--accent-2); }
-    .status-pill.warn { color: var(--warn); border-color: rgba(146,89,10,.28); background: #fff9ec; }
-    .status-pill.warn::before { background: var(--warn); }
-    .layout { display: grid; gap: 18px; align-items: start; }
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-    .commandbar {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 18px;
-    }
-    .command-summary {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      padding: 12px 14px;
-      min-height: 52px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      box-shadow: var(--shadow-soft);
-    }
-    .command-summary strong { font-size: 14px; }
-    .command-summary span { color: var(--muted); font-size: 12px; }
-    .command-summary span[data-kind="ok"] { color: var(--accent-2); }
-    .command-summary span[data-kind="warn"] { color: var(--warn); }
-    .command-summary span[data-kind="bad"] { color: var(--bad); }
-    .command-actions {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 8px;
-      align-items: center;
-    }
-    .command-actions select { width: auto; min-width: 190px; }
-    .import-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(220px, 1fr));
-      gap: 12px;
-      align-items: end;
-      margin-bottom: 16px;
-    }
-    .import-grid .full-row { grid-column: 1 / -1; }
-    .import-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-      margin: 6px 0 18px;
-    }
-    .import-section-title {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: center;
-      padding-top: 14px;
-      border-top: 1px solid #edf0f3;
-      margin-top: 6px;
-    }
-    .import-section-title h3 { margin: 0; font-size: 14px; }
-    .advanced-mapping {
-      border-top: 1px solid #edf0f3;
-      margin-top: 10px;
-      padding-top: 12px;
-    }
-    .advanced-mapping summary {
-      cursor: pointer;
-      font-weight: 850;
-      font-size: 14px;
-      color: var(--ink);
-      list-style-position: inside;
-    }
-    .advanced-mapping[open] summary { margin-bottom: 10px; }
-    .panel h2 {
-      margin: 0;
-      padding: 14px 16px;
-      font-size: 14px;
-      letter-spacing: .01em;
-      border-bottom: 1px solid var(--line);
-      background: var(--surface-2);
-    }
-    .panel-body { padding: 16px; }
-    label { display: block; font-weight: 750; font-size: 12px; margin-bottom: 6px; color: #263449; }
-    input, select, button, textarea {
-      font: inherit;
-      color: var(--ink);
-    }
-    input[type="file"], input[type="text"], input[type="number"], input[type="date"], select {
-      width: 100%;
-      border: 1px solid var(--line);
-      background: #fff;
-      border-radius: 6px;
-      padding: 9px 10px;
-      min-height: 40px;
-      font-size: 14px;
-      outline: none;
-      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
-    }
-    input:focus, select:focus {
-      border-color: rgba(15, 118, 110, .55);
-      box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
-    }
-    input[type="file"] {
-      padding: 6px;
-      color: var(--muted);
-      background: var(--surface-2);
-    }
-    input[type="file"]::file-selector-button {
-      border: 0;
-      border-radius: 5px;
-      background: #263449;
-      color: #fff;
-      padding: 8px 10px;
-      margin-right: 10px;
-      font-weight: 750;
-      cursor: pointer;
-    }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .format-stack { display: grid; grid-template-columns: 1fr; gap: 10px; }
-    .stack { display: grid; gap: 12px; }
-    .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
-    .field-note { display: none; }
-    .intro-note {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 10px 12px;
-      color: var(--muted);
-      background: #fbfcfd;
-      font-size: 13px;
-      line-height: 1.45;
-    }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-    .empty-state {
-      border: 1px dashed var(--line-strong);
-      border-radius: 8px;
-      padding: 18px;
-      background: #fbfcfd;
-      color: var(--muted);
-      display: grid;
-      gap: 5px;
-    }
-    .empty-state strong {
-      color: var(--ink);
-      font-size: 14px;
-    }
-    .empty-state span {
-      font-size: 13px;
-      line-height: 1.45;
-    }
-    .empty-state ol {
-      margin: 4px 0 0;
-      padding-left: 20px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.55;
-    }
-    .empty-state-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 6px;
-    }
-    .loading-row {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px;
-      background: var(--surface-2);
-      display: grid;
-      gap: 8px;
-    }
-    .skeleton {
-      height: 12px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #edf2f7 0%, #f8fafc 50%, #edf2f7 100%);
-      background-size: 200% 100%;
-      animation: shimmer 1.1s linear infinite;
-    }
-    .skeleton.short { width: 42%; }
-    .skeleton.medium { width: 68%; }
-    @keyframes shimmer { to { background-position: -200% 0; } }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    button, .button-link {
-      border: 1px solid transparent;
-      border-radius: 6px;
-      padding: 9px 11px;
-      font-weight: 800;
-      min-height: 40px;
-      cursor: pointer;
-      background: #eef2f5;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      text-decoration: none;
-      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease;
-    }
-    button:hover:not(:disabled), .button-link:hover { transform: translateY(-1px); box-shadow: var(--shadow-soft); }
-    button:focus-visible, .button-link:focus-visible {
-      outline: 3px solid rgba(15, 118, 110, .22);
-      outline-offset: 2px;
-    }
-    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-    button.primary:hover:not(:disabled) { background: var(--accent-dark); }
-    button.secondary, .button-link.secondary { background: #fff; border-color: var(--line-strong); color: var(--ink); }
-    button.ghost, .button-link.ghost { background: var(--surface-2); border-color: var(--line); color: #334155; }
-    button:disabled { cursor: not-allowed; opacity: .55; transform: none; box-shadow: none; }
-    button[data-loading="true"]::after {
-      content: "";
-      width: 12px;
-      height: 12px;
-      margin-left: 8px;
-      border: 2px solid currentColor;
-      border-right-color: transparent;
-      border-radius: 50%;
-      animation: spin .65s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .mapping {
-      display: grid;
-      grid-template-columns: minmax(190px, 250px) minmax(180px, 1fr) minmax(160px, 230px);
-      gap: 10px;
-      align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid #edf0f3;
-    }
-    .mapping:last-child { border-bottom: 0; }
-    .req { color: var(--accent); font-weight: 800; }
-    .map-help { color: var(--muted); font-size: 12px; }
-    .default-input { min-width: 0; }
-    .status {
-      margin-top: 12px;
-      border-radius: 6px;
-      border: 1px solid var(--line);
-      padding: 11px 12px;
-      font-size: 12px;
-      color: var(--muted);
-      background: var(--surface-2);
-      white-space: pre-wrap;
-    }
-    .status.ok { border-color: rgba(13,107,87,.35); color: var(--accent-2); background: #f2fbf7; }
-    .status.warn { border-color: rgba(148,98,0,.35); color: var(--warn); background: #fff9ec; }
-    .status.bad { border-color: rgba(165,29,42,.35); color: var(--bad); background: #fff4f5; }
-    .sample-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; background:#fff; }
-    table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 13px; }
-    th, td { border-bottom: 1px solid #edf0f3; padding: 9px 10px; text-align: left; vertical-align: top; }
-    th { background: #fbfcfd; font-weight: 750; color: #384554; position: sticky; top: 0; }
-    td { color: #394757; }
-    pre {
-      margin: 0;
-      max-height: 180px;
-      overflow: auto;
-      white-space: pre;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 12px;
-      background: #101923;
-      color: #f3f7fb;
-      font-size: 12px;
-      min-height: 58px;
-    }
-    .spec {
-      display: none;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-top: 13px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .spec div { border: 1px solid var(--line); border-radius: 6px; padding: 9px; background: #fbfcfd; }
-    .compact-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .wide-action { grid-column: 1 / -1; }
-    .result-grid { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)); gap: 10px; }
-    .metric {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
-      padding: 13px;
-      min-height: 74px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      border-top: 3px solid var(--accent-2);
-    }
-    .metric strong { display: block; font-size: 22px; margin-bottom: 3px; line-height: 1.05; }
-    .metric span { color: var(--muted); font-size: 12px; font-weight: 650; }
-    .error-list { display: grid; gap: 8px; }
-    .error-summary {
-      border: 1px solid rgba(165,29,42,.28);
-      border-radius: 8px;
-      padding: 12px;
-      background: var(--bad-soft);
-      color: var(--bad);
-    }
-    .error-summary strong { display:block; margin-bottom: 8px; }
-    .error-summary ul { margin: 0; padding-left: 18px; }
-    .error-item { border: 1px solid rgba(165,29,42,.25); border-radius: 6px; padding: 9px; background: #fff4f5; color: var(--bad); font-size: 13px; }
-    dialog {
-      width: min(1120px, calc(100vw - 28px));
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      padding: 0;
-    }
-    dialog::backdrop { background: rgba(17,24,32,.34); }
-    .dialog-head { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); background:var(--surface-2); }
-    .dialog-head h2 { margin:0; font-size:16px; }
-    .dialog-body { padding:16px; max-height:70vh; overflow:auto; }
-    .help-grid { display:grid; gap:12px; }
-    .help-grid section { border-bottom:1px solid #edf0f3; padding-bottom:12px; }
-    .help-grid h3 { margin:0 0 6px; font-size:14px; }
-    .help-grid p { font-size:13px; }
-    .account-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; align-items:start; }
-    .account-card { border:1px solid var(--line); border-radius:8px; background:#fff; padding:14px; }
-    .account-card h3 { margin:0 0 12px; font-size:14px; }
-    .account-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
-    .account-list { display:grid; gap:8px; margin-top:12px; }
-    .account-row { display:grid; grid-template-columns: 1.2fr 1fr auto; gap:10px; align-items:center; border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--surface-2); }
-    .account-row strong { display:block; font-size:13px; }
-    .account-row span { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
-    .validation-line { min-height:20px; font-size:12px; color:var(--muted); margin-top:6px; white-space:pre-wrap; }
-    .validation-line.ok { color:var(--accent-2); }
-    .validation-line.bad { color:var(--bad); }
-    .registry-sample { margin-top:10px; max-height:180px; overflow:auto; border:1px solid var(--line); border-radius:6px; }
-    .mapping-toolbar { display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:12px; }
-    .muted-small { color: var(--muted); font-size: 12px; }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        animation-duration: .01ms !important;
-        animation-iteration-count: 1 !important;
-        scroll-behavior: auto !important;
-        transition-duration: .01ms !important;
-      }
-    }
-    @media (max-width: 880px) {
-      .shell { padding: 16px 12px 28px; }
-      .commandbar { grid-template-columns: 1fr; }
-      .command-actions { justify-content: stretch; }
-      .command-actions > * { flex: 1 1 calc(50% - 8px); }
-      .command-actions select, .command-actions .primary { flex-basis: 100%; width: 100%; }
-      .import-grid { grid-template-columns: 1fr; }
-      header { display: block; }
-      .header-meta { justify-content: flex-start; margin-top: 12px; }
-      .badge { display: inline-block; }
-      .mapping { grid-template-columns: 1fr; gap: 7px; }
-      .spec { grid-template-columns: 1fr; }
-      .result-grid { grid-template-columns: 1fr; }
-      .account-grid { grid-template-columns: 1fr; }
-      .account-row { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 720px) {
-      .sample-wrap { border: 0; background: transparent; overflow: visible; }
-      .sample-wrap table, .sample-wrap thead, .sample-wrap tbody, .sample-wrap tr, .sample-wrap th, .sample-wrap td {
-        display: block;
-        min-width: 0;
-        width: 100%;
-      }
-      .sample-wrap thead { display: none; }
-      .sample-wrap tr {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #fff;
-        margin-bottom: 8px;
-        overflow: hidden;
-      }
-      .sample-wrap td {
-        display: grid;
-        grid-template-columns: minmax(110px, 38%) 1fr;
-        gap: 8px;
-        border-bottom: 1px solid #edf0f3;
-      }
-      .sample-wrap td::before {
-        content: attr(data-label);
-        color: var(--muted);
-        font-weight: 750;
-      }
-    }
-  </style>
+  <link rel="preconnect" href="https://rsms.me/">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+  <link rel="stylesheet" href="/static/styles-base.css">
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#c0263b">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
 </head>
 <body>
   <div class="shell">
@@ -1322,6 +876,7 @@ HTML_PAGE = r"""<!doctype html>
         <button id="convertBtn" class="primary" disabled aria-describedby="convertDisabledReason">TXT letöltése</button>
         <span id="convertDisabledReason" class="sr-only">Tölts fel fájlt és olvasd be az importot.</span>
         <a id="templateLink" class="button-link ghost" href="/template.xlsx" download>Excel sablon</a>
+        <a id="backupLink" class="button-link ghost" href="/api/backup" download title="Összes JSON + audit log + séma verzió ZIP-ben">Mentés (ZIP)</a>
         <button id="helpBtn" class="ghost" type="button">? Súgó</button>
       </div>
     </section>
@@ -1330,14 +885,27 @@ HTML_PAGE = r"""<!doctype html>
       <main class="panel">
         <h2>Beolvasás eredménye</h2>
         <div class="panel-body">
-          <div id="resultSummary" class="result-grid">
+          <div id="resultSummary" class="result-grid" aria-live="polite">
             <div class="metric"><strong>-</strong><span>Fejléc</span></div>
             <div class="metric"><strong>-</strong><span>Adatsor</span></div>
             <div class="metric"><strong>-</strong><span>Formátum</span></div>
           </div>
-          <div id="errorArea" class="error-list" style="margin-top:14px;"></div>
-          <div style="margin-top:14px;">
-            <h3 style="font-size:14px;margin:0 0 8px;">Beolvasott minta</h3>
+          <div id="errorArea" class="error-list" role="alert" aria-live="assertive" style="margin-top:14px;"></div>
+          <section class="empty-state" id="resultEmptyState" style="margin-top:16px;">
+            <h3>Még nincs beolvasott importfájl</h3>
+            <p>Indítsd el az importot három lépésben.</p>
+            <ol>
+              <li>Válaszd ki a cégedet a fejlécben.</li>
+              <li>Nyisd meg az <strong>Import</strong> panelt, válassz bankot, formátumot és fájlt.</li>
+              <li>Beolvasás után töltsd le a <strong>TXT</strong> importfájlt.</li>
+            </ol>
+            <div class="cta-row">
+              <button class="primary" type="button" onclick="document.getElementById('openImportBtn').click()">Import indítása</button>
+              <a class="button-link ghost" href="/template.xlsx" download>Excel sablon letöltése</a>
+            </div>
+          </section>
+          <div style="margin-top:16px;">
+            <h3 style="font-size:13px;margin:0 0 8px;color:var(--ink-500);text-transform:uppercase;letter-spacing:.05em;">Beolvasott minta</h3>
             <div id="sampleArea" class="sample-wrap"></div>
           </div>
         </div>
@@ -1352,1508 +920,72 @@ HTML_PAGE = r"""<!doctype html>
     </section>
   </div>
 
-  <dialog id="importDialog" aria-labelledby="importDialogTitle">
-    <div class="dialog-head">
-      <h2 id="importDialogTitle">Import</h2>
-      <button id="closeImportBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="import-grid">
-        <div>
-          <label for="bankSelect">Bank</label>
-          <select id="bankSelect"></select>
-        </div>
-        <div>
-          <label for="formatSelect">Formátum</label>
-          <select id="formatSelect"></select>
-          <div id="formatHelp" class="hint">A bank által elvárt TXT rekordforma.</div>
-        </div>
-        <div class="full-row">
-          <label for="fileInput">Fájl</label>
-          <input id="fileInput" type="file" accept=".xlsx,.xlsm,.csv">
-        </div>
-        <div>
-          <label for="encoding">TXT kódolás</label>
-          <select id="encoding">
-            <option value="cp1250" selected>windows-1250</option>
-            <option value="cp852">IBM CP852</option>
-            <option value="utf-8">UTF-8</option>
-          </select>
-        </div>
-        <div>
-          <label for="identifierDate">Azonosító dátuma</label>
-          <input id="identifierDate" type="date">
-        </div>
-      </div>
-      <div class="import-actions">
-        <button id="inspectBtn" class="primary">Beolvasás</button>
-        <a id="templateLinkInDialog" class="button-link ghost" href="/template.xlsx" download>Excel sablon</a>
-      </div>
-      <details id="mappingDetails" class="advanced-mapping">
-        <summary>Haladó: Excel oszlopmegfeleltetés</summary>
-        <div class="import-section-title">
-          <div>
-            <h3>Excel oszlopok hozzárendelése</h3>
-            <div class="muted-small">Nem a banki szabványt módosítja, csak azt állítja be, melyik Excel oszlop melyik fix mezőbe kerüljön.</div>
-          </div>
-          <button id="useGuessesBtn" class="secondary" type="button">Automatikus felismerés</button>
-        </div>
-        <div id="mappingArea" class="stack">
-          <p>Még nincs beolvasott fejléc.</p>
-        </div>
-      </details>
-    </div>
-  </dialog>
+  <import-dialog id="importDialog"></import-dialog>
+  <accounts-dialog id="accountsDialog"></accounts-dialog>
+  <companies-dialog id="companiesDialog"></companies-dialog>
+  <partners-dialog id="partnersDialog"></partners-dialog>
+  <account-edit-dialog id="accountEditDialog"></account-edit-dialog>
+  <partner-edit-dialog id="partnerEditDialog"></partner-edit-dialog>
 
-  <dialog id="accountsDialog" aria-labelledby="accountsDialogTitle">
-    <div class="dialog-head">
-      <h2 id="accountsDialogTitle">Saját bankszámlák listája - <span id="accountsCompanyName"></span></h2>
-      <button id="closeAccountsBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="account-grid">
-        <section class="account-card">
-          <h3>Kézi rögzítés</h3>
-          <div class="grid-2">
-            <div>
-              <label for="ownBankCountry">Bank országa</label>
-              <select id="ownBankCountry">
-                <option value="HU" selected>HU - Magyarország</option>
-              </select>
-            </div>
-            <div>
-              <label for="ownBankName">Bank neve</label>
-              <input id="ownBankName" type="text" placeholder="Automatikus is lehet a hitelesítő táblából">
-            </div>
-            <div>
-              <label for="ownCurrency">Deviza</label>
-              <select id="ownCurrency"></select>
-            </div>
-          </div>
-          <div style="margin-top:10px;">
-            <label for="ownAccountNumber">Számlaszám vagy HU IBAN</label>
-            <input id="ownAccountNumber" type="text" placeholder="12345678-12345678-12345678 vagy HU...">
-          </div>
-          <div class="account-actions">
-            <button id="saveAccountBtn" class="primary" type="button">Mentés</button>
-          </div>
-          <div id="accountStatus" class="status" role="status" aria-live="polite">Nincs kiválasztott bankszámla.</div>
-        </section>
-
-        <section class="account-card">
-          <h3>Import</h3>
-          <label for="accountImportFile">Bankszámla import</label>
-          <input id="accountImportFile" type="file" accept=".xlsx,.xlsm,.csv">
-          <div class="account-actions">
-            <button id="importAccountsBtn" class="secondary" type="button">Importálás</button>
-            <a class="button-link ghost" href="/accounts-template.xlsx" download>Import sablon</a>
-          </div>
-          <div id="registryMeta" class="status" role="status" aria-live="polite">Hitelesítő tábla állapota betöltés alatt.</div>
-        </section>
-      </div>
-
-      <section class="account-card" style="margin-top:14px;">
-        <h3>Rögzített bankszámlák</h3>
-        <div id="accountsList" class="account-list"></div>
-      </section>
-    </div>
-  </dialog>
-
-  <dialog id="companiesDialog" aria-labelledby="companiesDialogTitle">
-    <div class="dialog-head">
-      <h2 id="companiesDialogTitle">Cégek</h2>
-      <button id="closeCompaniesBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="account-grid">
-        <section class="account-card">
-          <h3>Új cég</h3>
-          <label for="companyName">Cég neve</label>
-          <input id="companyName" type="text" placeholder="pl. Minta Kft">
-          <div class="account-actions">
-            <button id="saveCompanyBtn" class="primary" type="button">Mentés</button>
-          </div>
-          <div id="companyStatus" class="status" role="status" aria-live="polite">A cégválasztó az import célcégét adja meg.</div>
-        </section>
-        <section class="account-card">
-          <h3>Rögzített cégek</h3>
-          <div id="companiesList" class="account-list"></div>
-        </section>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="partnersDialog" aria-labelledby="partnersDialogTitle">
-    <div class="dialog-head">
-      <h2 id="partnersDialogTitle">Partnerlista</h2>
-      <button id="closePartnersBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="account-grid">
-        <section class="account-card">
-          <h3>Kézi rögzítés</h3>
-          <div class="grid-2">
-            <div><label for="partnerCode">Partner kód</label><input id="partnerCode" type="text"></div>
-            <div><label for="partnerName">Név</label><input id="partnerName" type="text"></div>
-            <div><label for="partnerAccount">Magyar számlaszám</label><input id="partnerAccount" type="text" placeholder="12345678-12345678-12345678"></div>
-            <div><label for="partnerIban">IBAN</label><input id="partnerIban" type="text"></div>
-            <div><label for="partnerSwift">SWIFT/BIC</label><input id="partnerSwift" type="text"></div>
-            <div><label for="partnerCountry">Ország</label><input id="partnerCountry" type="text" value="HU"></div>
-          </div>
-          <label for="partnerAddress">Partner címe</label>
-          <input id="partnerAddress" type="text">
-          <div class="grid-2" style="margin-top:10px;">
-            <div><label for="partnerBankName">Bank neve</label><input id="partnerBankName" type="text"></div>
-            <div><label for="partnerBankAddress">Bank címe</label><input id="partnerBankAddress" type="text"></div>
-          </div>
-          <div class="account-actions">
-            <button id="savePartnerBtn" class="primary" type="button">Mentés</button>
-            <button id="lookupPartnerBankBtn" class="secondary" type="button">Bankadat keresés</button>
-          </div>
-          <div id="partnerStatus" class="status" role="status" aria-live="polite">Magyar számlánál az első 8 számjegyből tölt banknevet.</div>
-        </section>
-        <section class="account-card">
-          <h3>Import</h3>
-          <label for="partnerImportFile">Partner import</label>
-          <input id="partnerImportFile" type="file" accept=".xlsx,.xlsm,.csv">
-          <div class="account-actions">
-            <button id="importPartnersBtn" class="secondary" type="button">Importálás</button>
-            <a class="button-link ghost" href="/partners-template.xlsx" download>Import sablon</a>
-          </div>
-        </section>
-      </div>
-      <section class="account-card" style="margin-top:14px;">
-        <h3>Rögzített partnerek</h3>
-        <div id="partnersList" class="account-list"></div>
-      </section>
-    </div>
-  </dialog>
-
-  <dialog id="accountEditDialog" aria-labelledby="accountEditDialogTitle">
-    <div class="dialog-head">
-      <h2 id="accountEditDialogTitle">Bankszámla szerkesztése</h2>
-      <button id="closeAccountEditBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="account-card">
-        <div class="grid-2">
-          <div>
-            <label for="editBankCountry">Bank országa</label>
-            <select id="editBankCountry">
-              <option value="HU" selected>HU - Magyarország</option>
-            </select>
-          </div>
-          <div>
-            <label for="editBankName">Bank neve</label>
-            <input id="editBankName" type="text">
-          </div>
-          <div>
-            <label for="editCurrency">Deviza</label>
-            <select id="editCurrency"></select>
-          </div>
-        </div>
-        <div style="margin-top:10px;">
-          <label for="editAccountNumber">Számlaszám vagy HU IBAN</label>
-          <input id="editAccountNumber" type="text">
-        </div>
-        <div class="account-actions">
-          <button id="saveAccountEditBtn" class="primary" type="button">Mentés</button>
-          <button id="cancelAccountEditBtn" class="secondary" type="button">Mégse</button>
-        </div>
-        <div id="accountEditStatus" class="status" role="status" aria-live="polite">Szerkesztésre megnyitva.</div>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="partnerEditDialog" aria-labelledby="partnerEditDialogTitle">
-    <div class="dialog-head">
-      <h2 id="partnerEditDialogTitle">Partner szerkesztése</h2>
-      <button id="closePartnerEditBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="account-card">
-        <div class="grid-2">
-          <div><label for="editPartnerCode">Partner kód</label><input id="editPartnerCode" type="text"></div>
-          <div><label for="editPartnerName">Név</label><input id="editPartnerName" type="text"></div>
-          <div><label for="editPartnerAccount">Magyar számlaszám</label><input id="editPartnerAccount" type="text"></div>
-          <div><label for="editPartnerIban">IBAN</label><input id="editPartnerIban" type="text"></div>
-          <div><label for="editPartnerSwift">SWIFT/BIC</label><input id="editPartnerSwift" type="text"></div>
-          <div><label for="editPartnerCountry">Ország</label><input id="editPartnerCountry" type="text"></div>
-        </div>
-        <label for="editPartnerAddress">Partner címe</label>
-        <input id="editPartnerAddress" type="text">
-        <div class="grid-2" style="margin-top:10px;">
-          <div><label for="editPartnerBankName">Bank neve</label><input id="editPartnerBankName" type="text"></div>
-          <div><label for="editPartnerBankAddress">Bank címe</label><input id="editPartnerBankAddress" type="text"></div>
-        </div>
-        <div class="account-actions">
-          <button id="savePartnerEditBtn" class="primary" type="button">Mentés</button>
-          <button id="cancelPartnerEditBtn" class="secondary" type="button">Mégse</button>
-        </div>
-        <div id="partnerEditStatus" class="status" role="status" aria-live="polite">Szerkesztésre megnyitva.</div>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="helpDialog" aria-labelledby="helpDialogTitle">
-    <div class="dialog-head">
-      <h2 id="helpDialogTitle">Súgó</h2>
-      <button id="closeHelpBtn" class="secondary" type="button">Bezárás</button>
-    </div>
-    <div class="dialog-body">
-      <div class="help-grid">
-        <section><h3>Bank és formátum</h3><p>A bank kiválasztása szűri a választható import formátumokat. Most az Erste EDIFACT forint PAYORD (DO) és deviza PAYORD (IN) formátumai érhetők el.</p></section>
-        <section><h3>TXT kódolás</h3><p>A letöltött TXT karakterkészlete. Magyar banki importnál általában a windows-1250 a jó alapérték.</p></section>
-        <section><h3>Azonosító dátuma</h3><p>Ha az Excelben nincs 14 számjegyű azonosító, a konverter ebből generál azonosítót: ÉÉÉÉHHNN + 6 jegyű sorszám.</p></section>
-        <section><h3>Excel oszlopmegfeleltetés</h3><p>Ez nem a banki szabvány szerkesztése. Csak azt határozza meg, hogy a feltöltött Excel melyik oszlopa kerüljön a kiválasztott fix banki formátum adott mezőjébe.</p></section>
-        <section><h3>Saját bankszámlák</h3><p>A listába jelenleg magyar bankszámlák rögzíthetők. A mentés ellenőrzi a 3x8-as belföldi ellenőrzőszámokat, HU IBAN esetén a MOD 97-10 IBAN szabályt és a belföldi számlarészt is.</p></section>
-        <section><h3>Hibakezelés</h3><p>Konvertálás előtt az app ellenőrzi a kötelező mezőket, dátumokat, összegeket és a mezőhosszokat. A hibák a Beolvasás eredménye panelen jelennek meg.</p></section>
-      </div>
-    </div>
-  </dialog>
+  <help-dialog id="helpDialog"></help-dialog>
 
 <script>
-const BANKS = __BANKS_JSON__;
-const FORMATS = __FORMATS_JSON__;
-const FIELDS = __FIELDS_JSON__;
-const CURRENCIES = __CURRENCIES_JSON__;
-let currentInspect = null;
-let currentSettings = { active_bank: "erste", active_format: "erste_huf_payord", formats: {} };
-let saveTimer = null;
-let editingAccountId = "";
-let editingPartnerId = "";
-let accountsState = [];
-let companiesState = [];
-let partnersState = [];
-let registryRows = [];
-let lastAutoBankName = "";
-let lastEditAutoBankName = "";
-const dialogTriggers = new WeakMap();
-
-const el = id => document.getElementById(id);
-const today = new Date();
-el("identifierDate").value = today.toISOString().slice(0, 10);
-
-function focusableElements(root) {
-  return [...root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
-    .filter(item => item.offsetParent !== null || item === document.activeElement);
-}
-
-function openDialog(dialogId, trigger = document.activeElement) {
-  const dialog = el(dialogId);
-  if (!dialog) return;
-  dialogTriggers.set(dialog, trigger);
-  dialog.showModal();
-  requestAnimationFrame(() => {
-    const first = focusableElements(dialog)[0];
-    (first || dialog).focus();
+window.__BANKS = __BANKS_JSON__;
+window.__FORMATS = __FORMATS_JSON__;
+window.__FIELDS = __FIELDS_JSON__;
+window.__CURRENCIES = __CURRENCIES_JSON__;
+</script>
+<script defer src="/static/js/core-dom.js"></script>
+<script defer src="/static/js/components/dialog-base.js"></script>
+<script defer src="/static/js/components/help-dialog.js"></script>
+<script defer src="/static/js/components/partner-edit-dialog.js"></script>
+<script defer src="/static/js/components/import-dialog.js"></script>
+<script defer src="/static/js/components/accounts-dialog.js"></script>
+<script defer src="/static/js/components/companies-dialog.js"></script>
+<script defer src="/static/js/components/partners-dialog.js"></script>
+<script defer src="/static/js/components/account-edit-dialog.js"></script>
+<script defer src="/static/js/companies.js"></script>
+<script defer src="/static/js/samples.js"></script>
+<script defer src="/static/js/accounts.js"></script>
+<script defer src="/static/js/partners.js"></script>
+<script defer src="/static/js/registry.js"></script>
+<script defer src="/static/js/convert.js"></script>
+<script defer src="/static/js/dialogs.js"></script>
+<script defer src="/static/app.js"></script>
+<script defer src="/static/js/toast.js"></script>
+<script defer src="/static/js/theme.js"></script>
+<script defer src="/static/js/preview.js"></script>
+<script defer src="/static/js/filter.js"></script>
+<script defer src="/static/js/mobile-tables.js"></script>
+<script defer src="/static/js/validation.js"></script>
+<script defer src="/static/js/combobox.js"></script>
+<script defer src="/static/js/registry-retry.js"></script>
+<script defer src="/static/js/export-summary.js"></script>
+<script defer src="/static/js/diff-view.js"></script>
+<script defer src="/static/js/undo.js"></script>
+<script defer src="/static/js/shortcuts.js"></script>
+<script defer src="/static/js/field-help.js"></script>
+<script defer src="/static/js/dropzone.js"></script>
+<script defer src="/static/js/recent-files.js"></script>
+<script defer src="/static/js/onboarding.js"></script>
+<script defer src="/static/js/import-profiles.js"></script>
+<script defer src="/static/js/bulk-ops.js"></script>
+<script defer src="/static/js/error-row-jump.js"></script>
+<script defer src="/static/js/i18n.js"></script>
+<script defer src="/static/js/audit-log.js"></script>
+<script defer src="/static/js/pwa-register.js"></script>
+<script>
+// Hide empty state once a sample table is rendered
+document.addEventListener("DOMContentLoaded", () => {
+  const empty = document.getElementById("resultEmptyState");
+  const sample = document.getElementById("sampleArea");
+  if (!empty || !sample) return;
+  const obs = new MutationObserver(() => {
+    const hasContent = sample.querySelector("table") || sample.children.length > 0 && !sample.querySelector("p");
+    empty.style.display = hasContent ? "none" : "";
   });
-}
-
-function closeDialog(dialogId) {
-  const dialog = el(dialogId);
-  if (!dialog?.open) return;
-  dialog.close();
-}
-
-function setupDialogA11y() {
-  document.querySelectorAll("dialog").forEach(dialog => {
-    if (dialog.dataset.a11yReady) return;
-    dialog.dataset.a11yReady = "1";
-    dialog.setAttribute("tabindex", "-1");
-    dialog.addEventListener("keydown", event => {
-      if (event.key !== "Tab") return;
-      const items = focusableElements(dialog);
-      if (!items.length) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    });
-    dialog.addEventListener("close", () => {
-      const trigger = dialogTriggers.get(dialog);
-      if (trigger && document.contains(trigger)) {
-        trigger.focus();
-      }
-    });
-  });
-}
-
-function populateBanks() {
-  const bankSelect = el("bankSelect");
-  bankSelect.innerHTML = "";
-  for (const [id, bank] of Object.entries(BANKS)) {
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = bank.label;
-    bankSelect.appendChild(option);
-  }
-}
-
-function populateCurrencySelect(select, selected = "HUF") {
-  select.innerHTML = "";
-  for (const code of CURRENCIES) {
-    const option = document.createElement("option");
-    option.value = code;
-    option.textContent = code;
-    select.appendChild(option);
-  }
-  select.value = CURRENCIES.includes(selected) ? selected : "HUF";
-}
-
-function populateCurrencySelects() {
-  populateCurrencySelect(el("ownCurrency"), "HUF");
-  populateCurrencySelect(el("editCurrency"), "HUF");
-}
-
-function activeCompanyId() {
-  return el("companySelect")?.value || "default";
-}
-
-function activeCompanyName() {
-  const found = companiesState.find(company => company.id === activeCompanyId());
-  return found?.name || "Alap cég";
-}
-
-async function loadCompanies() {
-  if (el("companiesList")) el("companiesList").innerHTML = loadingRows("Cégek betöltése...");
-  const data = await fetchJson("/api/companies");
-  companiesState = data.companies || [];
-  const select = el("companySelect");
-  const current = data.active_company_id || currentSettings.active_company_id || activeCompanyId();
-  select.innerHTML = "";
-  for (const company of companiesState) {
-    const option = document.createElement("option");
-    option.value = company.id;
-    option.textContent = company.name;
-    select.appendChild(option);
-  }
-  if ([...select.options].some(option => option.value === current)) select.value = current;
-  else if (select.options.length) select.selectedIndex = 0;
-  renderCompanies();
-}
-
-function renderCompanies() {
-  const list = el("companiesList");
-  if (!list) return;
-  renderListState("companiesList", companiesState || [], company => `
-    <div class="account-row">
-      <div><strong>${escapeHtml(company.name)}</strong><span>${company.id === activeCompanyId() ? "Aktív" : "Cég"}</span></div>
-      <div><strong>${escapeHtml(company.id)}</strong><span>Azonosító</span></div>
-      <div class="account-actions" style="margin:0;">
-        <button class="secondary" type="button" data-set-company="${escapeHtml(company.id)}">Kiválasztás</button>
-      </div>
-    </div>
-  `, "Nincs rögzített cég", "Adj hozzá céget, hogy cégenként külön számlákat és partnereket kezelj.");
-}
-
-async function saveCompany() {
-  const name = el("companyName").value.trim();
-  if (!name) {
-    setCompanyStatus("Adj meg cégnevet.", "bad");
-    return;
-  }
-  setButtonLoading("saveCompanyBtn", true, "Mentés...");
-  try {
-    const data = await fetchJson("/api/companies", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name })
-    });
-    companiesState = data.companies || [];
-    el("companyName").value = "";
-    await loadCompanies();
-    el("companySelect").value = data.company.id;
-    await changeCompany(data.company.id);
-    setCompanyStatus("Cég mentve.", "ok");
-  } finally {
-    setButtonLoading("saveCompanyBtn", false);
-  }
-}
-
-function setCompanyStatus(text, kind = "") {
-  const box = el("companyStatus");
-  box.textContent = text;
-  box.className = `status ${kind}`;
-}
-
-async function changeCompany(companyId) {
-  currentSettings.active_company_id = companyId || activeCompanyId();
-  await saveSettings();
-  renderCompanies();
-  if (el("accountsDialog")?.open) await loadAccounts();
-  if (el("partnersDialog")?.open) await loadPartners();
-  setStatus(`Aktív cég: ${activeCompanyName()}`, "ok");
-}
-
-function populateFormats() {
-  const bankId = el("bankSelect").value;
-  const desired = currentSettings.active_format || el("formatSelect").value;
-  const formatSelect = el("formatSelect");
-  formatSelect.innerHTML = "";
-  for (const [id, format] of Object.entries(FORMATS)) {
-    if (format.bank !== bankId) continue;
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = format.label;
-    formatSelect.appendChild(option);
-  }
-  if ([...formatSelect.options].some(o => o.value === desired)) {
-    formatSelect.value = desired;
-  } else if (formatSelect.options.length) {
-    formatSelect.selectedIndex = 0;
-  }
-  applySelectedFormat();
-}
-
-function selectedFormat() {
-  return FORMATS[el("formatSelect").value] || Object.values(FORMATS)[0];
-}
-
-function currentFields() {
-  return selectedFormat()?.fields || FIELDS;
-}
-
-function applySelectedFormat() {
-  const format = selectedFormat();
-  if (!format) return;
-  el("formatBadge").textContent = format.badge || format.short_label || format.label;
-  el("commandFormatName").textContent = format.short_label || format.label;
-  el("formatHelp").textContent = format.description;
-  el("templateLink").href = `/template.xlsx?format=${encodeURIComponent(el("formatSelect").value)}`;
-  el("templateLinkInDialog").href = `/template.xlsx?format=${encodeURIComponent(el("formatSelect").value)}`;
-  const settings = formatSettings();
-  el("encoding").value = settings.encoding || format.default_encoding || "cp1250";
-  if (settings.identifier_date) el("identifierDate").value = settings.identifier_date;
-  buildMappings();
-  updateConvertAction();
-  saveSettingsDebounced();
-}
-
-function formatSettings(formatId = el("formatSelect").value) {
-  currentSettings.formats ||= {};
-  currentSettings.formats[formatId] ||= { mapping: {}, defaults: {} };
-  currentSettings.formats[formatId].mapping ||= {};
-  currentSettings.formats[formatId].defaults ||= {};
-  return currentSettings.formats[formatId];
-}
-
-async function loadSettings() {
-  try {
-    const res = await fetch("/api/settings");
-    if (res.ok) currentSettings = await res.json();
-  } catch {}
-}
-
-function saveSettingsDebounced() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveSettings, 350);
-}
-
-async function saveSettings() {
-  const formatId = el("formatSelect").value || "erste_huf_payord";
-  currentSettings.active_company_id = activeCompanyId();
-  currentSettings.active_bank = el("bankSelect").value || "erste";
-  currentSettings.active_format = formatId;
-  currentSettings.formats ||= {};
-  const existing = formatSettings(formatId);
-  const collected = collectConfig();
-  if (!document.querySelector("[data-map]")) {
-    collected.mapping = existing.mapping || {};
-    collected.defaults = existing.defaults || {};
-  }
-  currentSettings.formats[formatId] = collected;
-  try {
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(currentSettings)
-    });
-  } catch {
-    setStatus("A beállítás mentése nem sikerült.", "warn");
-  }
-}
-
-function setStatus(text, kind = "") {
-  const box = el("statusBox");
-  box.textContent = text;
-  box.dataset.kind = kind;
-}
-
-function setDisabledReason(buttonId, reason = "") {
-  const button = el(buttonId);
-  const reasonBox = el(`${buttonId.replace("Btn", "")}DisabledReason`);
-  if (!button) return;
-  const disabled = Boolean(reason);
-  button.disabled = disabled;
-  button.title = reason || "";
-  button.setAttribute("aria-disabled", disabled ? "true" : "false");
-  if (reasonBox) reasonBox.textContent = reason || "";
-}
-
-function getConvertDisabledReason() {
-  if (!el("fileInput").files[0]) return "Tölts fel egy Excel vagy CSV fájlt az Import panelen.";
-  if (!currentInspect) return "Olvasd be a fájlt, hogy ellenőrizni lehessen a fejlécet és a sorokat.";
-  if (requiredMappingMissing()) return "Ellenőrizd a kötelező Excel oszlop-hozzárendeléseket a Haladó részben.";
-  return "";
-}
-
-function updateConvertAction() {
-  setDisabledReason("convertBtn", getConvertDisabledReason());
-}
-
-function normalise(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function optionList(headers, selected) {
-  let out = `<option value="">-- nincs oszlop --</option>`;
-  for (const h of headers) {
-    const safe = escapeHtml(h);
-    out += `<option value="${safe}" ${h === selected ? "selected" : ""}>${safe}</option>`;
-  }
-  return out;
-}
-
-function escapeHtml(v) {
-  return String(v ?? "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  }[c]));
-}
-
-async function fetchJson(url, options = {}) {
-  const res = await fetch(url, options);
-  const contentType = res.headers.get("content-type") || "";
-  const data = contentType.includes("application/json") ? await res.json() : { error: await res.text() };
-  if (!res.ok) {
-    throw new Error(data.error || "A kérés nem sikerült.");
-  }
-  return data;
-}
-
-function emptyState(title, description) {
-  return `<div class="empty-state" role="status"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(description)}</span></div>`;
-}
-
-function importEmptyState() {
-  return `
-    <div class="empty-state" role="status">
-      <strong>Még nincs beolvasott adat</strong>
-      <span>A konvertálás három rövid lépésből áll. Először válaszd ki az aktív céget, utána tölts fel egy Excel vagy CSV fájlt az Import panelen.</span>
-      <ol>
-        <li>Cég kiválasztása vagy létrehozása.</li>
-        <li>Import panel megnyitása, bank és formátum ellenőrzése.</li>
-        <li>Fájl beolvasása, majd TXT letöltése.</li>
-      </ol>
-      <div class="empty-state-actions">
-        <button class="secondary" type="button" data-open-import>Import megnyitása</button>
-        <a class="button-link ghost" href="/template.xlsx" download>Sablon letöltése</a>
-      </div>
-    </div>
-  `;
-}
-
-function loadingRows(label = "Betöltés...") {
-  return `
-    <div class="loading-row" role="status" aria-live="polite" aria-label="${escapeHtml(label)}">
-      <div class="skeleton medium"></div>
-      <div class="skeleton"></div>
-      <div class="skeleton short"></div>
-    </div>
-  `;
-}
-
-function setButtonLoading(buttonId, isLoading, labelWhenLoading = "Dolgozom...") {
-  const button = el(buttonId);
-  if (!button) return;
-  if (isLoading) {
-    if (!button.dataset.originalText) button.dataset.originalText = button.textContent;
-    button.textContent = labelWhenLoading;
-    button.dataset.loading = "true";
-    button.disabled = true;
-  } else {
-    button.textContent = button.dataset.originalText || button.textContent;
-    delete button.dataset.originalText;
-    button.dataset.loading = "false";
-    button.disabled = false;
-  }
-}
-
-function renderListState(listId, rows, renderer, emptyTitle, emptyDescription) {
-  const list = el(listId);
-  if (!rows?.length) {
-    list.innerHTML = emptyState(emptyTitle, emptyDescription);
-    return;
-  }
-  list.innerHTML = rows.map(renderer).join("");
-}
-
-function buildMappings() {
-  const headers = currentInspect?.headers || [];
-  const guesses = currentInspect?.guesses || {};
-  const fields = currentFields();
-  const settings = formatSettings();
-  const area = el("mappingArea");
-  area.innerHTML = "";
-  for (const [key, info] of Object.entries(fields)) {
-    const row = document.createElement("div");
-    row.className = "mapping";
-    const required = info.required ? `<span class="req">*</span>` : "";
-    const guessed = settings.mapping[key] || guesses[key] || "";
-    const defaultValue = settings.defaults[key] ?? defaultFor(key);
-    row.innerHTML = `
-      <div>
-        <strong>${escapeHtml(info.label)} ${required}</strong>
-        <div class="map-help">${escapeHtml(info.help || "Excel oszlop hozzárendelése ehhez a fix banki mezőhöz.")}</div>
-      </div>
-      <select data-map="${escapeHtml(key)}">${optionList(headers, guessed)}</select>
-      <input class="default-input" data-default="${escapeHtml(key)}" type="text"
-        value="${escapeHtml(defaultValue)}" placeholder="Fix érték, ha nincs Excel oszlop">
-    `;
-    area.appendChild(row);
-  }
-}
-
-function requiredMappingMissing() {
-  const headers = currentInspect?.headers || [];
-  const guesses = currentInspect?.guesses || {};
-  const settings = formatSettings();
-  return Object.entries(currentFields()).some(([key, info]) => {
-    if (!info.required) return false;
-    const mapped = settings.mapping[key] || guesses[key] || "";
-    const fallback = settings.defaults[key] ?? defaultFor(key);
-    return !mapped && !fallback && headers.length > 0;
-  });
-}
-
-function defaultFor(key) {
-  if (el("formatSelect")?.value === "erste_sepa_payord" && ["currency", "payout_currency"].includes(key)) {
-    return "EUR";
-  }
-  if (el("formatSelect")?.value === "erste_sepa_payord" && key === "decimals") {
-    return "2";
-  }
-  if (el("formatSelect")?.value === "unicredit_fx_ccy" && key === "cost_bearer") {
-    return "SHA";
-  }
-  if (el("formatSelect")?.value === "unicredit_fx_ccy" && key === "legal_code") {
-    return "000";
-  }
-  const defaults = {
-    sender_currency: "HUF",
-    currency: "HUF",
-    payout_currency: "EUR",
-    decimals: "0",
-    status: "",
-    beneficiary_country: "HU",
-    beneficiary_bank_country: "",
-    sender_account_type: "0",
-    beneficiary_account_type: "0",
-    swift_copy: "N",
-    custom_rate_use: "N",
-    urgent_use: "N",
-    urgent_execution: "N",
-    process_mode: "",
-    group_transfer: "N",
-    hold_flag: "N",
-    chqb_flag: "N",
-    deal_ticket_flag: "N",
-    cost_bearer: "1",
-    commission_bearer: "0",
-    other_fee_bearer: "0",
-    amount_currency_mode: " ",
-    payment_method: " ",
-    priority: " ",
-    item_type: " ",
-    iban_flag: " ",
-    document_no: "",
-    legal_code: "",
-    debtor_name: "",
-    external_ref: "",
-    internal_note: ""
-  };
-  return defaults[key] ?? "";
-}
-
-function renderSample() {
-  const headers = currentInspect?.headers || [];
-  const rows = currentInspect?.sample || [];
-  if (!headers.length) {
-    el("sampleArea").innerHTML = importEmptyState();
-    return;
-  }
-  let html = "<table><thead><tr>";
-  for (const h of headers) html += `<th>${escapeHtml(h)}</th>`;
-  html += "</tr></thead><tbody>";
-  for (const r of rows) {
-    html += "<tr>";
-    for (let i = 0; i < headers.length; i++) html += `<td data-label="${escapeHtml(headers[i])}">${escapeHtml(r[i] ?? "")}</td>`;
-    html += "</tr>";
-  }
-  html += "</tbody></table>";
-  el("sampleArea").innerHTML = html;
-}
-
-async function inspectFile() {
-  const file = el("fileInput").files[0];
-  if (!file) {
-    setStatus("Előbb válassz ki egy fájlt.", "warn");
-    updateConvertAction();
-    return;
-  }
-  const form = new FormData();
-  form.append("file", file);
-  setStatus("Beolvasás...");
-  setButtonLoading("inspectBtn", true, "Beolvasás...");
-  try {
-    const data = await fetchJson("/api/inspect", { method: "POST", body: form });
-    currentInspect = data;
-    buildMappings();
-    el("mappingDetails").open = requiredMappingMissing();
-    renderSample();
-    updateConvertAction();
-    renderResultSummary(data);
-    renderErrors([]);
-    setStatus(`${data.headers.length} fejléc beolvasva, ${data.data_rows} adatsor észlelve.`, "ok");
-    saveSettingsDebounced();
-  } catch (err) {
-    currentInspect = null;
-    updateConvertAction();
-    setStatus(err.message || "Nem sikerült beolvasni a fájlt.", "bad");
-    renderErrors([err.message || "Nem sikerült beolvasni a fájlt."]);
-  } finally {
-    setButtonLoading("inspectBtn", false);
-    updateConvertAction();
-  }
-}
-
-function renderResultSummary(data = null) {
-  const format = selectedFormat();
-  const rows = [
-    [data?.headers?.length ?? "-", "Fejléc"],
-    [data?.data_rows ?? "-", "Adatsor"],
-    [data?.errors?.length ?? 0, "Hibás sor"],
-    [format?.short_label ?? "-", "Formátum"]
-  ];
-  el("resultSummary").innerHTML = rows.map(([value, label]) =>
-    `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`
-  ).join("");
-}
-
-function renderErrors(errors) {
-  const list = Array.isArray(errors) ? errors : String(errors || "").split("\n").filter(Boolean);
-  if (!list.length) {
-    el("errorArea").innerHTML = "";
-    return;
-  }
-  el("errorArea").innerHTML = `
-    <div class="error-summary" role="alert" tabindex="-1">
-      <strong>${list.length} javítandó hiba</strong>
-      <ul>${list.map(e => `<li>${escapeHtml(e)}</li>`).join("")}</ul>
-    </div>
-  `;
-  el("errorArea").querySelector(".error-summary")?.focus();
-}
-
-function clientFormatHuAccount(value) {
-  const compact = String(value || "").replace(/[^0-9]/g, "");
-  const groups = compact.slice(0, 24).match(/.{1,8}/g) || [];
-  return groups.join("-");
-}
-
-function formatAccountNumberElement(input) {
-  const value = input.value;
-  const compact = value.replace(/[\s-]+/g, "").toUpperCase();
-  if (/^[A-Z]/.test(compact)) {
-    input.value = compact.replace(/[^A-Z0-9]/g, "").slice(0, 34).match(/.{1,4}/g)?.join(" ") || "";
-  } else {
-    input.value = clientFormatHuAccount(value);
-  }
-}
-
-function formatAccountNumberInput() {
-  formatAccountNumberElement(el("ownAccountNumber"));
-}
-
-function accountPrefixFromInput(value) {
-  const compact = String(value || "").replace(/[\s-]+/g, "").toUpperCase();
-  if (compact.startsWith("HU") && compact.length >= 12) {
-    return compact.slice(4, 12).replace(/\D/g, "");
-  }
-  if (/^[A-Z]/.test(compact)) {
-    return "";
-  }
-  return compact.replace(/\D/g, "").slice(0, 8);
-}
-
-function autoFillBankNameFor(accountInput, bankInput, countryValue, lastValue) {
-  if (countryValue !== "HU") return lastValue;
-  const prefix = accountPrefixFromInput(accountInput.value);
-  if (prefix.length !== 8) {
-    if (bankInput.value === lastValue) bankInput.value = "";
-    return "";
-  }
-  const found = registryRows.find(row => String(row.prefix || "") === prefix);
-  if (!found?.bank_name) return lastValue;
-  if (!bankInput.value || bankInput.value === lastValue) {
-    bankInput.value = found.bank_name;
-    return found.bank_name;
-  }
-  return lastValue;
-}
-
-function autoFillBankNameFromAccount() {
-  lastAutoBankName = autoFillBankNameFor(el("ownAccountNumber"), el("ownBankName"), el("ownBankCountry").value, lastAutoBankName);
-}
-
-function autoFillBankNameFromEditAccount() {
-  lastEditAutoBankName = autoFillBankNameFor(el("editAccountNumber"), el("editBankName"), el("editBankCountry").value, lastEditAutoBankName);
-}
-
-function updateAccountValidationHint() {
-  const value = el("ownAccountNumber").value.trim();
-  const compact = value.replace(/[\s-]+/g, "").toUpperCase();
-  if (!value || /^[A-Z]{2}/.test(compact)) {
-    return;
-  }
-  el("ownAccountNumber").value = clientFormatHuAccount(value);
-}
-
-function updateEditAccountFormatting() {
-  const value = el("editAccountNumber").value.trim();
-  const compact = value.replace(/[\s-]+/g, "").toUpperCase();
-  if (!value || /^[A-Z]{2}/.test(compact)) {
-    return;
-  }
-  el("editAccountNumber").value = clientFormatHuAccount(value);
-}
-
-function setAccountStatus(text, kind = "") {
-  const box = el("accountStatus");
-  box.textContent = text;
-  box.className = `status ${kind}`;
-}
-
-function setAccountEditStatus(text, kind = "") {
-  const box = el("accountEditStatus");
-  box.textContent = text;
-  box.className = `status ${kind}`;
-}
-
-function clearAccountForm() {
-  lastAutoBankName = "";
-  el("ownBankCountry").value = "HU";
-  el("ownBankName").value = "";
-  el("ownCurrency").value = "HUF";
-  el("ownAccountNumber").value = "";
-  updateAccountValidationHint();
-  setAccountStatus("Nincs kiválasztott bankszámla.");
-}
-
-function renderAccounts(accounts) {
-  accountsState = accounts || [];
-  el("accountsCompanyName").textContent = activeCompanyName();
-  renderListState("accountsList", accountsState, account => `
-    <div class="account-row">
-      <div>
-        <strong>${escapeHtml(account.bank_name || "Nincs banknév")}</strong>
-        <span>${escapeHtml(account.bank_country || "HU")}</span>
-      </div>
-      <div>
-        <strong>${escapeHtml(account.account_number || "")}</strong>
-        <span>${escapeHtml(account.currency || "HUF")}</span>
-      </div>
-      <div class="account-actions" style="margin:0;">
-        <button class="secondary" type="button" data-edit-account="${escapeHtml(account.id)}">Szerkesztés</button>
-        <button class="ghost" type="button" data-delete-account="${escapeHtml(account.id)}">Törlés</button>
-      </div>
-    </div>
-  `, "Nincs saját bankszámla", "Az aktív céghez még nincs rögzített bankszámla. Rögzíts kézzel vagy importálj sablonból.");
-}
-
-async function loadAccounts() {
-  el("accountsList").innerHTML = loadingRows("Saját bankszámlák betöltése...");
-  const data = await fetchJson(`/api/accounts?company_id=${encodeURIComponent(activeCompanyId())}`);
-  renderAccounts(data.accounts || []);
-}
-
-async function saveAccount() {
-  const payload = {
-    id: "",
-    company_id: activeCompanyId(),
-    bank_country: el("ownBankCountry").value,
-    bank_name: el("ownBankName").value,
-    currency: el("ownCurrency").value,
-    account_number: el("ownAccountNumber").value
-  };
-  setAccountStatus("Mentés...");
-  setButtonLoading("saveAccountBtn", true, "Mentés...");
-  try {
-    const data = await fetchJson(`/api/accounts?company_id=${encodeURIComponent(activeCompanyId())}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    renderAccounts(data.accounts || []);
-    clearAccountForm();
-    setAccountStatus("Bankszámla mentve és validálva.", "ok");
-  } finally {
-    setButtonLoading("saveAccountBtn", false);
-  }
-}
-
-async function deleteAccount(id) {
-  const res = await fetch(`/api/accounts/delete?company_id=${encodeURIComponent(activeCompanyId())}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id })
-  });
-  const data = await res.json();
-  renderAccounts(data.accounts || []);
-  setAccountStatus("Bankszámla törölve.", "ok");
-}
-
-function editAccount(id) {
-  const account = accountsState.find(item => item.id === id);
-  if (!account) return;
-  editingAccountId = id;
-  el("editBankCountry").value = account.bank_country || "HU";
-  el("editBankName").value = account.bank_name || "";
-  el("editCurrency").value = account.currency || "HUF";
-  el("editAccountNumber").value = account.account_number || "";
-  lastEditAutoBankName = account.bank_name || "";
-  updateEditAccountFormatting();
-  setAccountEditStatus("Szerkesztésre megnyitva.");
-  openDialog("accountEditDialog");
-}
-
-async function saveEditedAccount() {
-  if (!editingAccountId) {
-    setAccountEditStatus("Nincs szerkesztésre kiválasztott bankszámla.", "bad");
-    return;
-  }
-  const payload = {
-    id: editingAccountId,
-    company_id: activeCompanyId(),
-    bank_country: el("editBankCountry").value,
-    bank_name: el("editBankName").value,
-    currency: el("editCurrency").value,
-    account_number: el("editAccountNumber").value
-  };
-  setAccountEditStatus("Mentés...");
-  const res = await fetch(`/api/accounts?company_id=${encodeURIComponent(activeCompanyId())}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    setAccountEditStatus(data.error || "Nem sikerült menteni.", "bad");
-    return;
-  }
-  renderAccounts(data.accounts || []);
-  editingAccountId = "";
-  lastEditAutoBankName = "";
-  el("accountEditDialog").close();
-  setAccountStatus("Bankszámla módosítva.", "ok");
-}
-
-async function importAccounts() {
-  const file = el("accountImportFile").files[0];
-  if (!file) {
-    setAccountStatus("Válassz ki egy import fájlt.", "warn");
-    return;
-  }
-  const form = new FormData();
-  form.append("file", file);
-  setAccountStatus("Importálás...");
-  const res = await fetch(`/api/accounts/import?company_id=${encodeURIComponent(activeCompanyId())}`, { method: "POST", body: form });
-  const data = await res.json();
-  if (!res.ok) {
-    setAccountStatus(data.error || "Nem sikerült importálni.", "bad");
-    return;
-  }
-  renderAccounts(data.accounts || []);
-  const errorText = (data.errors || []).length ? ` Hibák: ${(data.errors || []).join("; ")}` : "";
-  setAccountStatus(`${data.added || 0} bankszámla importálva.${errorText}`, errorText ? "warn" : "ok");
-}
-
-function setPartnerStatus(text, kind = "") {
-  const box = el("partnerStatus");
-  box.textContent = text;
-  box.className = `status ${kind}`;
-}
-
-function clearPartnerForm() {
-  for (const id of ["partnerCode", "partnerName", "partnerAccount", "partnerIban", "partnerSwift", "partnerAddress", "partnerBankName", "partnerBankAddress"]) {
-    el(id).value = "";
-  }
-  el("partnerCountry").value = "HU";
-}
-
-function autoFillPartnerBankFromHuAccount() {
-  const prefix = accountPrefixFromInput(el("partnerAccount").value || el("partnerIban").value);
-  if (prefix.length !== 8) return;
-  const found = registryRows.find(row => String(row.prefix || "") === prefix);
-  if (found?.bank_name && !el("partnerBankName").value) {
-    el("partnerBankName").value = found.bank_name;
-  }
-}
-
-function renderPartners(partners) {
-  partnersState = partners || [];
-  renderListState("partnersList", partnersState, partner => `
-    <div class="account-row">
-      <div>
-        <strong>${escapeHtml(partner.name || "Nincs név")}</strong>
-        <span>${escapeHtml(partner.partner_code || "")}</span>
-      </div>
-      <div>
-        <strong>${escapeHtml(partner.account_number || partner.iban || "")}</strong>
-        <span>${escapeHtml(partner.swift_bic || partner.bank_name || "")}</span>
-      </div>
-      <div class="account-actions" style="margin:0;">
-        <button class="secondary" type="button" data-edit-partner="${escapeHtml(partner.id)}">Szerkesztés</button>
-        <button class="ghost" type="button" data-delete-partner="${escapeHtml(partner.id)}">Törlés</button>
-      </div>
-    </div>
-  `, "Nincs partner", "Az aktív cég partnerlistája üres. Rögzíts új partnert vagy importáld Excelből.");
-}
-
-async function loadPartners() {
-  el("partnersList").innerHTML = loadingRows("Partnerek betöltése...");
-  const data = await fetchJson(`/api/partners?company_id=${encodeURIComponent(activeCompanyId())}`);
-  renderPartners(data.partners || []);
-}
-
-function collectPartnerPayload() {
-  return {
-    company_id: activeCompanyId(),
-    partner_code: el("partnerCode").value,
-    name: el("partnerName").value,
-    account_number: el("partnerAccount").value,
-    iban: el("partnerIban").value,
-    swift_bic: el("partnerSwift").value,
-    country: el("partnerCountry").value,
-    address: el("partnerAddress").value,
-    bank_name: el("partnerBankName").value,
-    bank_address: el("partnerBankAddress").value
-  };
-}
-
-async function savePartner() {
-  setPartnerStatus("Mentés...");
-  setButtonLoading("savePartnerBtn", true, "Mentés...");
-  try {
-    const data = await fetchJson(`/api/partners?company_id=${encodeURIComponent(activeCompanyId())}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(collectPartnerPayload())
-    });
-    renderPartners(data.partners || []);
-    clearPartnerForm();
-    setPartnerStatus("Partner mentve.", "ok");
-  } finally {
-    setButtonLoading("savePartnerBtn", false);
-  }
-}
-
-async function deletePartner(id) {
-  const res = await fetch(`/api/partners/delete?company_id=${encodeURIComponent(activeCompanyId())}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, company_id: activeCompanyId() })
-  });
-  const data = await res.json();
-  renderPartners(data.partners || []);
-  setPartnerStatus("Partner törölve.", "ok");
-}
-
-async function importPartners() {
-  const file = el("partnerImportFile").files[0];
-  if (!file) {
-    setPartnerStatus("Válassz ki import fájlt.", "warn");
-    return;
-  }
-  const form = new FormData();
-  form.append("file", file);
-  setPartnerStatus("Importálás...");
-  const res = await fetch(`/api/partners/import?company_id=${encodeURIComponent(activeCompanyId())}`, { method: "POST", body: form });
-  const data = await res.json();
-  if (!res.ok) {
-    setPartnerStatus(data.error || "Nem sikerült importálni.", "bad");
-    return;
-  }
-  renderPartners(data.partners || []);
-  const errorText = (data.errors || []).length ? ` Hibák: ${(data.errors || []).slice(0, 3).join("; ")}` : "";
-  setPartnerStatus(`${data.added || 0} partner importálva.${errorText}`, errorText ? "warn" : "ok");
-}
-
-function setPartnerEditStatus(text, kind = "") {
-  const box = el("partnerEditStatus");
-  box.textContent = text;
-  box.className = `status ${kind}`;
-}
-
-function editPartner(id) {
-  const partner = partnersState.find(item => item.id === id);
-  if (!partner) return;
-  editingPartnerId = id;
-  el("editPartnerCode").value = partner.partner_code || "";
-  el("editPartnerName").value = partner.name || "";
-  el("editPartnerAccount").value = partner.account_number || "";
-  el("editPartnerIban").value = partner.iban || "";
-  el("editPartnerSwift").value = partner.swift_bic || "";
-  el("editPartnerCountry").value = partner.country || "HU";
-  el("editPartnerAddress").value = partner.address || "";
-  el("editPartnerBankName").value = partner.bank_name || "";
-  el("editPartnerBankAddress").value = partner.bank_address || "";
-  setPartnerEditStatus("Szerkesztésre megnyitva.");
-  openDialog("partnerEditDialog");
-}
-
-function collectEditedPartnerPayload() {
-  return {
-    id: editingPartnerId,
-    company_id: activeCompanyId(),
-    partner_code: el("editPartnerCode").value,
-    name: el("editPartnerName").value,
-    account_number: el("editPartnerAccount").value,
-    iban: el("editPartnerIban").value,
-    swift_bic: el("editPartnerSwift").value,
-    country: el("editPartnerCountry").value,
-    address: el("editPartnerAddress").value,
-    bank_name: el("editPartnerBankName").value,
-    bank_address: el("editPartnerBankAddress").value
-  };
-}
-
-async function saveEditedPartner() {
-  if (!editingPartnerId) {
-    setPartnerEditStatus("Nincs szerkesztésre kiválasztott partner.", "bad");
-    return;
-  }
-  setPartnerEditStatus("Mentés...");
-  setButtonLoading("savePartnerEditBtn", true, "Mentés...");
-  try {
-    const data = await fetchJson(`/api/partners?company_id=${encodeURIComponent(activeCompanyId())}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(collectEditedPartnerPayload())
-    });
-    renderPartners(data.partners || []);
-    editingPartnerId = "";
-    el("partnerEditDialog").close();
-    setPartnerStatus("Partner módosítva.", "ok");
-  } finally {
-    setButtonLoading("savePartnerEditBtn", false);
-  }
-}
-
-async function lookupPartnerBank() {
-  const params = new URLSearchParams({ bic: el("partnerSwift").value, iban: el("partnerIban").value });
-  autoFillPartnerBankFromHuAccount();
-  if (!params.get("bic") && !params.get("iban")) {
-    setPartnerStatus("Adj meg SWIFT/BIC kódot vagy IBAN-t.", "warn");
-    return;
-  }
-  setPartnerStatus("Bankadat keresés...");
-  const res = await fetch(`/api/bic-lookup?${params.toString()}`);
-  const data = await res.json();
-  if (!res.ok || !data.found) {
-    setPartnerStatus(data.error || "Nem találtam online bankadatot. Kézzel megadható.", "warn");
-    return;
-  }
-  if (data.bank_name) el("partnerBankName").value = data.bank_name;
-  if (data.bank_address) el("partnerBankAddress").value = data.bank_address;
-  if (data.bic) el("partnerSwift").value = data.bic;
-  setPartnerStatus(data.source_message || "Bankadat kitöltve.", "ok");
-}
-
-function renderRegistry(registry) {
-  registryRows = registry.rows || [];
-  const meta = [];
-  const count = registry.row_count || (registry.rows || []).length || 0;
-  if (registry.startup_message) meta.push(registry.startup_message);
-  else if (registry.updated_at) meta.push(`Hitelesítő tábla betöltve: ${count} prefix, frissítve: ${registry.updated_at}.`);
-  else meta.push("Hitelesítő tábla még nincs betöltve.");
-  const box = el("registryMeta");
-  box.textContent = meta.join(" ");
-  box.className = `status ${registry.startup_ok === false ? "warn" : "ok"}`;
-  const pill = el("registryPill");
-  if (pill) {
-    pill.textContent = registry.startup_ok === false
-      ? "MNB tábla: helyi adat"
-      : `MNB tábla: ${count || 0} prefix`;
-    pill.className = `status-pill ${registry.startup_ok === false ? "warn" : "ok"}`;
-    pill.title = meta.join(" ");
-  }
-}
-
-async function loadRegistry() {
-  const res = await fetch("/api/bank-registry");
-  const data = await res.json();
-  renderRegistry(data);
-  autoFillBankNameFromAccount();
-  autoFillBankNameFromEditAccount();
-}
-
-function collectConfig() {
-  const mapping = {};
-  const defaults = {};
-  document.querySelectorAll("[data-map]").forEach(sel => mapping[sel.dataset.map] = sel.value);
-  document.querySelectorAll("[data-default]").forEach(inp => defaults[inp.dataset.default] = inp.value);
-  return {
-    company_id: activeCompanyId(),
-    bank: el("bankSelect").value || "",
-    format: el("formatSelect").value || "",
-    encoding: el("encoding").value,
-    identifier_date: el("identifierDate").value,
-    mapping,
-    defaults
-  };
-}
-
-async function convertFile() {
-  const file = el("fileInput").files[0];
-  if (!file || !currentInspect) {
-    setStatus("Előbb olvasd be a fájlt.", "warn");
-    return;
-  }
-  const form = new FormData();
-  form.append("file", file);
-  form.append("config", JSON.stringify(collectConfig()));
-  setStatus("Konvertálás...");
-  setButtonLoading("convertBtn", true, "TXT készül...");
-  try {
-    const res = await fetch("/api/convert", { method: "POST", body: form });
-    const contentType = res.headers.get("content-type") || "";
-    if (!res.ok) {
-      const data = contentType.includes("application/json") ? await res.json() : {error: await res.text()};
-      setStatus(data.error || "Nem sikerült konvertálni.", "bad");
-      renderErrors(data.errors || data.error || []);
-      return;
-    }
-    const buffer = await res.arrayBuffer();
-    const blob = new Blob([buffer], { type: contentType || "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = res.headers.get("x-filename") || "payord_import.txt";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    const decoderLabel = el("encoding").value === "cp1250" ? "windows-1250" : (el("encoding").value === "cp852" ? "ibm852" : "utf-8");
-    let text = "";
-    try { text = new TextDecoder(decoderLabel).decode(buffer); }
-    catch { text = new TextDecoder("utf-8").decode(buffer); }
-    el("previewBox").textContent = text.slice(0, 700).replace(/\r/g, "\\r").replace(/\n/g, "\\n\n");
-    const rows = res.headers.get("x-record-count") || "?";
-    setStatus(`${rows} rekord elkészült és letöltődött.`, "ok");
-    renderErrors([]);
-    saveSettingsDebounced();
-  } finally {
-    setButtonLoading("convertBtn", false);
-    updateConvertAction();
-  }
-}
-
-el("inspectBtn").addEventListener("click", () => inspectFile().catch(err => setStatus(err.message, "bad")));
-el("convertBtn").addEventListener("click", () => convertFile().catch(err => setStatus(err.message, "bad")));
-el("bankSelect").addEventListener("change", populateFormats);
-el("formatSelect").addEventListener("change", applySelectedFormat);
-el("fileInput").addEventListener("change", () => {
-  currentInspect = null;
-  renderSample();
-  renderResultSummary();
-  renderErrors([]);
-  updateConvertAction();
+  obs.observe(sample, { childList: true, subtree: true });
 });
-el("sampleArea").addEventListener("click", event => {
-  if (event.target?.closest("[data-open-import]")) {
-    openDialog("importDialog", event.target.closest("[data-open-import]"));
-  }
-});
-el("openImportBtn").addEventListener("click", event => openDialog("importDialog", event.currentTarget));
-el("companiesBtn").addEventListener("click", async event => {
-  openDialog("companiesDialog", event.currentTarget);
-  await loadCompanies();
-});
-el("partnersBtn").addEventListener("click", async event => {
-  openDialog("partnersDialog", event.currentTarget);
-  await Promise.all([loadPartners(), loadRegistry()]);
-});
-el("accountsBtn").addEventListener("click", async event => {
-  openDialog("accountsDialog", event.currentTarget);
-  await Promise.all([loadAccounts(), loadRegistry()]);
-});
-el("helpBtn").addEventListener("click", event => openDialog("helpDialog", event.currentTarget));
-el("closeImportBtn").addEventListener("click", () => closeDialog("importDialog"));
-el("closeAccountsBtn").addEventListener("click", () => closeDialog("accountsDialog"));
-el("closeCompaniesBtn").addEventListener("click", () => closeDialog("companiesDialog"));
-el("closePartnersBtn").addEventListener("click", () => closeDialog("partnersDialog"));
-el("closePartnerEditBtn").addEventListener("click", () => {
-  editingPartnerId = "";
-  closeDialog("partnerEditDialog");
-});
-el("cancelPartnerEditBtn").addEventListener("click", () => {
-  editingPartnerId = "";
-  closeDialog("partnerEditDialog");
-});
-el("closeAccountEditBtn").addEventListener("click", () => {
-  editingAccountId = "";
-  closeDialog("accountEditDialog");
-});
-el("cancelAccountEditBtn").addEventListener("click", () => {
-  editingAccountId = "";
-  closeDialog("accountEditDialog");
-});
-el("closeHelpBtn").addEventListener("click", () => closeDialog("helpDialog"));
-el("saveAccountBtn").addEventListener("click", () => saveAccount().catch(err => setAccountStatus(err.message, "bad")));
-el("saveAccountEditBtn").addEventListener("click", () => saveEditedAccount().catch(err => setAccountEditStatus(err.message, "bad")));
-el("importAccountsBtn").addEventListener("click", () => importAccounts().catch(err => setAccountStatus(err.message, "bad")));
-el("saveCompanyBtn").addEventListener("click", () => saveCompany().catch(err => setCompanyStatus(err.message, "bad")));
-el("savePartnerBtn").addEventListener("click", () => savePartner().catch(err => setPartnerStatus(err.message, "bad")));
-el("savePartnerEditBtn").addEventListener("click", () => saveEditedPartner().catch(err => setPartnerEditStatus(err.message, "bad")));
-el("importPartnersBtn").addEventListener("click", () => importPartners().catch(err => setPartnerStatus(err.message, "bad")));
-el("lookupPartnerBankBtn").addEventListener("click", () => lookupPartnerBank().catch(err => setPartnerStatus(err.message, "bad")));
-el("companySelect").addEventListener("change", () => changeCompany(activeCompanyId()).catch(err => setStatus(err.message, "bad")));
-el("ownAccountNumber").addEventListener("input", () => {
-  formatAccountNumberInput();
-  updateAccountValidationHint();
-  autoFillBankNameFromAccount();
-});
-el("ownBankName").addEventListener("input", () => {
-  if (el("ownBankName").value !== lastAutoBankName) lastAutoBankName = "";
-});
-el("editAccountNumber").addEventListener("input", () => {
-  formatAccountNumberElement(el("editAccountNumber"));
-  updateEditAccountFormatting();
-  autoFillBankNameFromEditAccount();
-});
-el("editBankName").addEventListener("input", () => {
-  if (el("editBankName").value !== lastEditAutoBankName) lastEditAutoBankName = "";
-});
-el("accountsList").addEventListener("click", event => {
-  const editId = event.target?.dataset?.editAccount;
-  const deleteId = event.target?.dataset?.deleteAccount;
-  if (editId) editAccount(editId);
-  if (deleteId) deleteAccount(deleteId).catch(err => setAccountStatus(err.message, "bad"));
-});
-el("companiesList").addEventListener("click", event => {
-  const companyId = event.target?.dataset?.setCompany;
-  if (companyId) {
-    el("companySelect").value = companyId;
-    changeCompany(companyId).catch(err => setCompanyStatus(err.message, "bad"));
-  }
-});
-el("partnersList").addEventListener("click", event => {
-  const editId = event.target?.dataset?.editPartner;
-  const deleteId = event.target?.dataset?.deletePartner;
-  if (editId) editPartner(editId);
-  if (deleteId) deletePartner(deleteId).catch(err => setPartnerStatus(err.message, "bad"));
-});
-el("partnerAccount").addEventListener("input", () => {
-  formatAccountNumberElement(el("partnerAccount"));
-  autoFillPartnerBankFromHuAccount();
-});
-el("partnerIban").addEventListener("input", autoFillPartnerBankFromHuAccount);
-el("partnerSwift").addEventListener("blur", () => {
-  if (el("partnerSwift").value.trim()) lookupPartnerBank().catch(() => {});
-});
-el("editPartnerAccount").addEventListener("input", () => formatAccountNumberElement(el("editPartnerAccount")));
-
-function makeDialogsDraggable() {
-  document.querySelectorAll("dialog").forEach(dialog => {
-    const handle = dialog.querySelector(".dialog-head");
-    if (!handle || handle.dataset.draggableReady) return;
-    handle.dataset.draggableReady = "1";
-    handle.style.cursor = "move";
-    handle.addEventListener("pointerdown", event => {
-      if (event.target.closest("button")) return;
-      const rect = dialog.getBoundingClientRect();
-      const offsetX = event.clientX - rect.left;
-      const offsetY = event.clientY - rect.top;
-      dialog.style.margin = "0";
-      dialog.style.left = `${rect.left}px`;
-      dialog.style.top = `${rect.top}px`;
-      dialog.style.position = "fixed";
-      handle.setPointerCapture(event.pointerId);
-      const move = moveEvent => {
-        const maxLeft = Math.max(0, window.innerWidth - rect.width);
-        const maxTop = Math.max(0, window.innerHeight - 56);
-        const left = Math.min(Math.max(0, moveEvent.clientX - offsetX), maxLeft);
-        const top = Math.min(Math.max(0, moveEvent.clientY - offsetY), maxTop);
-        dialog.style.left = `${left}px`;
-        dialog.style.top = `${top}px`;
-      };
-      const stop = () => {
-        handle.removeEventListener("pointermove", move);
-        handle.removeEventListener("pointerup", stop);
-        handle.removeEventListener("pointercancel", stop);
-      };
-      handle.addEventListener("pointermove", move);
-      handle.addEventListener("pointerup", stop);
-      handle.addEventListener("pointercancel", stop);
-    });
-  });
-}
-el("useGuessesBtn").addEventListener("click", () => {
-  const settings = formatSettings();
-  settings.mapping = {...(currentInspect?.guesses || {})};
-  buildMappings();
-  saveSettingsDebounced();
-});
-el("mappingArea").addEventListener("change", saveSettingsDebounced);
-el("mappingArea").addEventListener("change", updateConvertAction);
-el("mappingArea").addEventListener("input", () => {
-  saveSettingsDebounced();
-  updateConvertAction();
-});
-el("encoding").addEventListener("change", saveSettingsDebounced);
-el("identifierDate").addEventListener("change", saveSettingsDebounced);
-
-(async function initApp() {
-  populateBanks();
-  populateCurrencySelects();
-  await loadSettings();
-  await loadCompanies();
-  if (currentSettings.active_company_id && [...el("companySelect").options].some(option => option.value === currentSettings.active_company_id)) {
-    el("companySelect").value = currentSettings.active_company_id;
-  }
-  if (BANKS[currentSettings.active_bank]) el("bankSelect").value = currentSettings.active_bank;
-  populateFormats();
-  if (FORMATS[currentSettings.active_format]) el("formatSelect").value = currentSettings.active_format;
-  applySelectedFormat();
-  renderResultSummary();
-  renderSample();
-  updateConvertAction();
-  setupDialogA11y();
-  makeDialogsDraggable();
-  loadRegistry().catch(() => {
-    const pill = el("registryPill");
-    if (pill) {
-      pill.textContent = "MNB tábla: nem elérhető";
-      pill.className = "status-pill warn";
-    }
-  });
-})();
 </script>
 </body>
 </html>
@@ -2878,19 +1010,58 @@ def text_response(handler: BaseHTTPRequestHandler, body: str, status: int = 200)
     handler.wfile.write(data)
 
 
-def get_upload(handler: BaseHTTPRequestHandler) -> cgi.FieldStorage:
-    return cgi.FieldStorage(
-        fp=handler.rfile,
-        headers=handler.headers,
-        environ={
-            "REQUEST_METHOD": "POST",
-            "CONTENT_TYPE": handler.headers.get("Content-Type", ""),
-            "CONTENT_LENGTH": handler.headers.get("Content-Length", "0"),
-        },
-    )
+class UploadItem:
+    def __init__(self, value: str | bytes = "", filename: str | None = None) -> None:
+        self.value = value
+        self.filename = filename
+        raw = value if isinstance(value, bytes) else value.encode("utf-8")
+        self.file = io.BytesIO(raw)
 
 
-def field_value(form: cgi.FieldStorage, name: str, default: str = "") -> str:
+class UploadForm(dict[str, UploadItem | list[UploadItem]]):
+    def add(self, name: str, item: UploadItem) -> None:
+        existing = self.get(name)
+        if existing is None:
+            self[name] = item
+        elif isinstance(existing, list):
+            existing.append(item)
+        else:
+            self[name] = [existing, item]
+
+
+def get_upload(handler: BaseHTTPRequestHandler) -> UploadForm:
+    length = int(handler.headers.get("Content-Length", "0") or 0)
+    body = handler.rfile.read(length)
+    content_type = handler.headers.get("Content-Type", "")
+    form = UploadForm()
+
+    if content_type.startswith("multipart/form-data"):
+        message = (
+            f"Content-Type: {content_type}\r\n"
+            "MIME-Version: 1.0\r\n\r\n"
+        ).encode("utf-8") + body
+        parsed = BytesParser(policy=email_policy).parsebytes(message)
+        for part in parsed.iter_parts():
+            name = part.get_param("name", header="content-disposition")
+            if not name:
+                continue
+            filename = part.get_filename()
+            payload = part.get_payload(decode=True) or b""
+            if filename:
+                form.add(name, UploadItem(payload, filename))
+            else:
+                charset = part.get_content_charset() or "utf-8"
+                form.add(name, UploadItem(payload.decode(charset, errors="replace")))
+        return form
+
+    if content_type.startswith("application/x-www-form-urlencoded"):
+        for key, values in parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True).items():
+            for value in values:
+                form.add(key, UploadItem(value))
+    return form
+
+
+def field_value(form: UploadForm, name: str, default: str = "") -> str:
     item = form[name] if name in form else None
     if item is None:
         return default
@@ -2901,10 +1072,12 @@ def field_value(form: cgi.FieldStorage, name: str, default: str = "") -> str:
     return str(item.value or default)
 
 
-def upload_bytes(form: cgi.FieldStorage) -> tuple[str, bytes]:
+def upload_bytes(form: UploadForm) -> tuple[str, bytes]:
     if "file" not in form:
         raise ValueError("Hiányzik a feltöltött fájl.")
     item = form["file"]
+    if isinstance(item, list):
+        item = item[0]
     filename = Path(item.filename or "upload.xlsx").name
     data = item.file.read()
     if not data:
@@ -4594,6 +2767,45 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+        # PWA root-scope assets served from static/
+        if path in ("/manifest.webmanifest", "/sw.js"):
+            fname = path.lstrip("/")
+            fp = Path(__file__).parent / "static" / fname
+            if fp.is_file():
+                ctype = "application/manifest+json" if path.endswith(".webmanifest") else "application/javascript; charset=utf-8"
+                data = fp.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                if path == "/sw.js":
+                    self.send_header("Service-Worker-Allowed", "/")
+                self.end_headers()
+                self.wfile.write(data); return
+            self.send_error(HTTPStatus.NOT_FOUND); return
+        if path.startswith("/static/"):
+            rel = path[len("/static/"):]
+            # Allow only safe relative paths under static/ (optionally one subdir like js/)
+            if ".." in rel or rel.startswith("/") or rel.startswith("\\") or rel.startswith("."):
+                self.send_error(HTTPStatus.NOT_FOUND); return
+            parts = rel.split("/")
+            if len(parts) > 3 or any(not p or p.startswith(".") for p in parts):
+                self.send_error(HTTPStatus.NOT_FOUND); return
+            fp = (Path(__file__).parent / "static").joinpath(*parts)
+            if not fp.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND); return
+            ctype = "text/css; charset=utf-8" if rel.endswith(".css") else (
+                "application/javascript; charset=utf-8" if rel.endswith(".js")
+                else "image/svg+xml" if rel.endswith(".svg")
+                else "application/octet-stream"
+            )
+            data = fp.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "public, max-age=300")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if path in {"/", "/index.html"}:
             body = (
                 HTML_PAGE
@@ -4625,6 +2837,41 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/bic-lookup":
             params = parse_qs(parsed.query)
             json_response(self, lookup_bic_online((params.get("bic") or [""])[0], (params.get("iban") or [""])[0]))
+            return
+        if path == "/api/audit":
+            try: limit = int((parse_qs(urlparse(self.path).query).get("limit") or ["200"])[0])
+            except Exception: limit = 200
+            json_response(self, {"entries": read_audit(min(max(limit, 1), 1000))})
+            return
+        if path == "/healthz":
+            json_response(self, {"ok": True, "ts": int(_time_mod.time() * 1000)})
+            return
+        if path == "/api/backup":
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for fp in [SETTINGS_FILE, ACCOUNTS_FILE, COMPANIES_FILE, PARTNERS_FILE,
+                           TRASH_FILE, AUDIT_FILE, SCHEMA_VERSION_FILE, BANK_REGISTRY_FILE]:
+                    if fp and fp.is_file():
+                        try:
+                            zf.write(fp, arcname=fp.name)
+                        except Exception as exc:
+                            log.warning("backup: skip %s (%s)", fp.name, exc)
+                meta = {
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                    "schema_version": CURRENT_SCHEMA_VERSION,
+                    "files": sorted([n for n in zf.namelist()]),
+                }
+                zf.writestr("_backup_manifest.json", json.dumps(meta, ensure_ascii=False, indent=2))
+            data = buf.getvalue()
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f"attachment; filename=banki_backup_{stamp}.zip")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            try: audit_log("backup.download", "", f"bytes={len(data)} files={len(meta['files'])}")
+            except Exception: pass
             return
         if path == "/api/bank-registry":
             registry = load_bank_registry()
@@ -4694,7 +2941,7 @@ class Handler(BaseHTTPRequestHandler):
                 companies = load_companies_file()
                 company = {"id": uuid.uuid4().hex, "name": name}
                 companies.append(company)
-                save_companies_file(companies)
+                save_companies_file(companies); audit_log('company.save', company.get('id',''), company.get('name',''))
                 settings = load_settings_file()
                 settings["active_company_id"] = company["id"]
                 save_settings_file(settings)
@@ -4725,8 +2972,12 @@ class Handler(BaseHTTPRequestHandler):
                 body = read_json_body(self)
                 company_id = ensure_company_id((post_params.get("company_id") or [body.get("company_id") or ""])[0])
                 account_id = clean_cell(body.get("id"))
-                accounts = [row for row in load_accounts_file() if not (row.get("id") == account_id and clean_cell(row.get("company_id") or "default") == company_id)]
+                all_acc = load_accounts_file()
+                victim = next((row for row in all_acc if row.get("id") == account_id and clean_cell(row.get("company_id") or "default") == company_id), None)
+                if victim: push_to_trash("accounts", victim)
+                accounts = [row for row in all_acc if not (row.get("id") == account_id and clean_cell(row.get("company_id") or "default") == company_id)]
                 save_accounts_file(accounts)
+                audit_log("account.delete", company_id, str(victim.get("account_number") if victim else account_id))
                 json_response(self, {"accounts": accounts_for_company(company_id)})
                 return
             if post_path == "/api/accounts/import":
@@ -4759,15 +3010,19 @@ class Handler(BaseHTTPRequestHandler):
                         break
                 if not found:
                     partners.append(payload)
-                save_partners_file(partners)
+                save_partners_file(partners); audit_log('partner.save', company_id, payload.get('name',''))
                 json_response(self, {"partner": payload, "partners": partners_for_company(company_id)})
                 return
             if post_path == "/api/partners/delete":
                 body = read_json_body(self)
                 company_id = ensure_company_id((post_params.get("company_id") or [body.get("company_id") or ""])[0])
                 partner_id = clean_cell(body.get("id"))
-                partners = [row for row in load_partners_file() if not (row.get("id") == partner_id and clean_cell(row.get("company_id") or "default") == company_id)]
+                all_partners = load_partners_file()
+                victim = next((row for row in all_partners if row.get("id") == partner_id and clean_cell(row.get("company_id") or "default") == company_id), None)
+                if victim: push_to_trash("partners", victim)
+                partners = [row for row in all_partners if not (row.get("id") == partner_id and clean_cell(row.get("company_id") or "default") == company_id)]
                 save_partners_file(partners)
+                audit_log("partner.delete", company_id, str(victim.get("name") if victim else partner_id))
                 json_response(self, {"partners": partners_for_company(company_id)})
                 return
             if post_path == "/api/partners/import":
@@ -4817,25 +3072,203 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(payload)
                 return
+            if post_path == "/api/partners/restore":
+                body = read_json_body(self)
+                row = pop_from_trash("partners", clean_cell(body.get("id")), ensure_company_id(body.get("company_id") or ""))
+                if row:
+                    partners = load_partners_file(); partners.append(row); save_partners_file(partners)
+                    audit_log("partner.restore", row.get("company_id",""), str(row.get("name","")))
+                json_response(self, {"restored": bool(row)})
+                return
+            if post_path == "/api/accounts/restore":
+                body = read_json_body(self)
+                row = pop_from_trash("accounts", clean_cell(body.get("id")), ensure_company_id(body.get("company_id") or ""))
+                if row:
+                    accounts = load_accounts_file(); accounts.append(row); save_accounts_file(accounts)
+                    audit_log("account.restore", row.get("company_id",""), str(row.get("account_number","")))
+                json_response(self, {"restored": bool(row)})
+                return
+            if post_path == "/api/companies/delete":
+                body = read_json_body(self)
+                cid = clean_cell(body.get("id"))
+                all_co = load_companies_file()
+                victim = next((c for c in all_co if c.get("id") == cid), None)
+                if victim: push_to_trash("companies", victim)
+                companies = [c for c in all_co if c.get("id") != cid]
+                save_companies_file(companies)
+                audit_log("company.delete", cid, str(victim.get("name") if victim else cid))
+                json_response(self, {"companies": companies})
+                return
+            if post_path == "/api/companies/restore":
+                body = read_json_body(self)
+                row = pop_from_trash("companies", clean_cell(body.get("id")))
+                if row:
+                    companies = load_companies_file(); companies.append(row); save_companies_file(companies)
+                    audit_log("company.restore", row.get("id",""), str(row.get("name","")))
+                json_response(self, {"restored": bool(row)})
+                return
             self.send_error(HTTPStatus.NOT_FOUND)
         except Exception as exc:
             message = str(exc)
             json_response(self, {"error": message, "errors": [line for line in message.splitlines() if line]}, status=400)
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        print(f"{self.address_string()} - {fmt % args}")
+        log.info("%s - %s", self.address_string(), fmt % args)
+
+
+
+# ---------- Iteration 6 additions: trash, audit, bulk, healthz ----------
+
+import threading
+import time as _time_mod
+
+def _load_trash() -> dict:
+    return load_json_file(TRASH_FILE, {"partners": [], "accounts": [], "companies": []})
+
+def _save_trash(data: dict) -> dict:
+    return write_json_file(TRASH_FILE, data)
+
+def push_to_trash(kind: str, item: dict) -> None:
+    t = _load_trash()
+    t.setdefault(kind, [])
+    item = dict(item); item["_trashed_at"] = _time_mod.time()
+    t[kind].append(item)
+    # keep last 200
+    t[kind] = t[kind][-200:]
+    _save_trash(t)
+
+def pop_from_trash(kind: str, item_id: str, company_id: str = "") -> dict | None:
+    t = _load_trash()
+    rows = t.get(kind, [])
+    for i, row in enumerate(rows):
+        if row.get("id") == item_id and (not company_id or clean_cell(row.get("company_id") or "default") == company_id):
+            rows.pop(i)
+            t[kind] = rows
+            _save_trash(t)
+            row.pop("_trashed_at", None)
+            return row
+    return None
+
+def audit_log(action: str, company_id: str = "", detail: str = "") -> None:
+    try:
+        line = json.dumps({
+            "ts": _time_mod.time() * 1000,
+            "action": action,
+            "company_id": company_id,
+            "detail": detail[:500],
+        }, ensure_ascii=False)
+        with open(AUDIT_FILE, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+        _rotate_audit_if_needed()
+    except Exception:
+        log.exception("audit_log failed")
+
+def _rotate_audit_if_needed() -> None:
+    """Keep audit log under AUDIT_MAX_LINES; rotate older entries to .1 backup."""
+    try:
+        if not AUDIT_FILE.exists():
+            return
+        with open(AUDIT_FILE, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+        if len(lines) <= AUDIT_MAX_LINES:
+            return
+        keep = lines[-AUDIT_MAX_LINES:]
+        archive = lines[:-AUDIT_MAX_LINES]
+        backup = AUDIT_FILE.with_suffix(AUDIT_FILE.suffix + ".1")
+        with open(backup, "a", encoding="utf-8") as fh:
+            fh.writelines(archive)
+        with open(AUDIT_FILE, "w", encoding="utf-8") as fh:
+            fh.writelines(keep)
+        log.info("audit log rotated: kept %d lines, archived %d to %s",
+                 len(keep), len(archive), backup.name)
+    except Exception:
+        log.exception("audit rotation failed")
+
+# ---------- Schema version + migration ----------
+def _read_schema_version() -> int:
+    if not SCHEMA_VERSION_FILE.exists():
+        return 0
+    try:
+        return int(json.loads(SCHEMA_VERSION_FILE.read_text(encoding="utf-8")).get("version", 0))
+    except Exception:
+        return 0
+
+def _write_schema_version(v: int) -> None:
+    SCHEMA_VERSION_FILE.write_text(
+        json.dumps({"version": v, "updated_at": _time_mod.time()}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+def run_schema_migrations() -> None:
+    """Run idempotent migrations. Add new ones as elif blocks bumping CURRENT_SCHEMA_VERSION."""
+    v = _read_schema_version()
+    if v >= CURRENT_SCHEMA_VERSION:
+        return
+    log.info("running schema migrations: %d -> %d", v, CURRENT_SCHEMA_VERSION)
+    if v < 1:
+        # v0 -> v1: normalize company_id on accounts & partners (legacy by_company shape)
+        try:
+            save_accounts_file(load_accounts_file())
+            save_partners_file(load_partners_file())
+            save_companies_file(load_companies_file())
+            log.info("migration v1: normalized accounts/partners/companies")
+        except Exception:
+            log.exception("migration v1 failed")
+    if v < 2:
+        # v1 -> v2: ensure trash file exists with all kinds
+        try:
+            t = _load_trash()
+            for k in ("partners", "accounts", "companies"):
+                t.setdefault(k, [])
+            _save_trash(t)
+            log.info("migration v2: trash file initialized")
+        except Exception:
+            log.exception("migration v2 failed")
+    _write_schema_version(CURRENT_SCHEMA_VERSION)
+    log.info("schema migrations complete: now at v%d", CURRENT_SCHEMA_VERSION)
+
+def read_audit(limit: int = 200) -> list[dict]:
+    if not AUDIT_FILE.exists():
+        return []
+    try:
+        with open(AUDIT_FILE, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+        out = []
+        for ln in lines[-limit:]:
+            ln = ln.strip()
+            if not ln: continue
+            try: out.append(json.loads(ln))
+            except Exception: pass
+        return out
+    except Exception:
+        return []
+
+def background_registry_refresh(interval_sec: int | None = None) -> None:
+    if interval_sec is None:
+        interval_sec = int(MNB_REFRESH_HOURS * 3600)
+    def loop():
+        while True:
+            try:
+                _time_mod.sleep(interval_sec)
+                refresh_bank_registry()
+            except Exception:
+                pass
+    t = threading.Thread(target=loop, daemon=True, name="banki-mnb-refresh")
+    t.start()
 
 
 def main() -> None:
+    run_schema_migrations()
     registry = refresh_bank_registry_at_startup()
-    print(registry.get("startup_message") or "Hitelesítő tábla állapota betöltve.")
+    background_registry_refresh()
+    log.info(registry.get("startup_message") or "Hitelesítő tábla állapota betöltve.")
     save_companies_file(load_companies_file())
     save_accounts_file(load_accounts_file())
     removed = cleanup_saved_accounts(registry)
     if removed:
-        print(f"{len(removed)} korábban mentett, érvénytelen saját bankszámla eltávolítva.")
+        log.info("%d korábban mentett, érvénytelen saját bankszámla eltávolítva.", len(removed))
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"PAYORD konverter fut: http://{HOST}:{PORT}")
+    log.info("PAYORD konverter fut: http://%s:%s", HOST, PORT)
     server.serve_forever()
 
 

@@ -1,0 +1,40 @@
+# pre-commit hookok: ruff + eslint + prettier + alap higiénia.
+# Telepítés:
+#   pip install pre-commit
+#   pre-commit install
+# Manuális futtatás minden fájlra:
+#   pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        files: \.(js|mjs|css|json|md|yml|yaml|html)$
+        exclude: "^(static/dist/|.*\\.min\\..*)$"
+
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.15.0
+    hooks:
+      - id: eslint
+        files: \.(js|mjs)$
+        exclude: "^static/dist/"
+        additional_dependencies:
+          - eslint@9.15.0
+          - "@eslint/js@9.15.0"
