@@ -1,53 +1,94 @@
-/* Banki UI - Minimal i18n. HU is the source; EN is an overlay applied at toggle.
-   Only translates static UI chrome (buttons, headers); banking field labels stay HU. */
+/* Banki UI - minimal static chrome i18n without page reload. */
 (function () {
   "use strict";
   const KEY = "banki.lang";
   const EN = {
-    "Cégek": "Companies", "Import": "Import",
-    "Saját bankszámlák": "Own accounts", "Partnerek": "Partners",
-    "TXT letöltése": "Download TXT", "Excel sablon": "Excel template",
-    "? Súgó": "? Help", "Bezárás": "Close", "Mentés": "Save",
-    "Mégse": "Cancel", "Beolvasás": "Read file", "Importálás": "Import",
-    "Súgó": "Help", "Összegzés": "Summary", "Visszavonás": "Undo",
-    "Kijelöltek törlése": "Delete selected", "Excel export": "Export to Excel",
-    "Beolvasás eredménye": "Read result", "TXT előnézet": "TXT preview",
-    "Kezdjük": "Start", "Kihagyás": "Skip", "Vissza": "Back",
-    "Bank": "Bank", "Formátum": "Format", "Fájl": "File",
-    "TXT kódolás": "TXT encoding", "Azonosító dátuma": "Identifier date",
+    "Cégek": "Companies",
+    "Import": "Import",
+    "Saját bankszámlák": "Own accounts",
+    "Partnerek": "Partners",
+    "TXT letöltése": "Download TXT",
+    "Excel sablon": "Excel template",
+    "? Súgó": "? Help",
+    "Bezárás": "Close",
+    "Mentés": "Save",
+    "Mégse": "Cancel",
+    "Beolvasás": "Read file",
+    "Importálás": "Import",
+    "Súgó": "Help",
+    "Összegzés": "Summary",
+    "Napló": "Log",
+    "Kijelöltek törlése": "Delete selected",
+    "Excel export": "Export to Excel",
+    "Beolvasás eredménye": "Read result",
+    "TXT előnézet": "TXT preview",
+    "Bank": "Bank",
+    "Formátum": "Format",
+    "Fájl": "File",
+    "TXT kódolás": "TXT encoding",
+    "Azonosító dátuma": "Identifier date",
     "Beolvasott minta": "Sample data",
   };
-  function applyLang(lang) {
-    if (lang === "hu") { location.reload(); return; }
-    // Walk text nodes; substitute exact matches in the HU dictionary
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let n; const subs = [];
-    while ((n = walker.nextNode())) {
-      const t = n.nodeValue.trim();
-      if (t && EN[t]) subs.push([n, EN[t]]);
-    }
-    subs.forEach(([n, v]) => n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), v));
-    document.documentElement.lang = "en";
-    localStorage.setItem(KEY, "en");
+
+  function textNodes(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const value = node.nodeValue.trim();
+        if (!value) return NodeFilter.FILTER_REJECT;
+        if (node.parentElement?.closest("script,style,pre,code")) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) nodes.push(node);
+    return nodes;
   }
+
+  function remember(node) {
+    if (node.parentElement && !node.parentElement.dataset.i18nOriginal) {
+      node.parentElement.dataset.i18nOriginal = node.nodeValue;
+    }
+  }
+
+  function applyLang(lang) {
+    document.documentElement.lang = lang === "en" ? "en" : "hu";
+    document.documentElement.dataset.lang = lang;
+    for (const node of textNodes(document.body)) {
+      remember(node);
+      const original = node.parentElement?.dataset.i18nOriginal || node.nodeValue;
+      const trimmed = original.trim();
+      if (lang === "en" && EN[trimmed]) {
+        node.nodeValue = original.replace(trimmed, EN[trimmed]);
+      } else if (lang === "hu") {
+        node.nodeValue = original;
+      }
+    }
+    localStorage.setItem(KEY, lang);
+  }
+
   function inject() {
     if (document.getElementById("langToggle")) return;
     const host = document.querySelector(".header-meta");
     if (!host) return;
-    const btn = document.createElement("button");
-    btn.id = "langToggle"; btn.type = "button"; btn.className = "lang-toggle";
-    btn.title = "Nyelv / Language";
-    btn.textContent = (localStorage.getItem(KEY) === "en") ? "HU" : "EN";
-    btn.addEventListener("click", () => {
-      const cur = localStorage.getItem(KEY) || "hu";
-      const next = cur === "hu" ? "en" : "hu";
-      localStorage.setItem(KEY, next);
+    const button = document.createElement("button");
+    button.id = "langToggle";
+    button.type = "button";
+    button.className = "lang-toggle";
+    button.title = "Nyelv / Language";
+    const lang = localStorage.getItem(KEY) || "hu";
+    button.textContent = lang === "en" ? "HU" : "EN";
+    button.addEventListener("click", () => {
+      const next = (localStorage.getItem(KEY) || "hu") === "hu" ? "en" : "hu";
+      document.documentElement.classList.add("no-ui-transition");
       applyLang(next);
-      btn.textContent = next === "en" ? "HU" : "EN";
+      button.textContent = next === "en" ? "HU" : "EN";
+      requestAnimationFrame(() => document.documentElement.classList.remove("no-ui-transition"));
     });
-    host.appendChild(btn);
-    if (localStorage.getItem(KEY) === "en") applyLang("en");
+    host.appendChild(button);
+    if (lang === "en") applyLang("en");
   }
+
   if (document.readyState !== "loading") inject();
   else document.addEventListener("DOMContentLoaded", inject);
 })();

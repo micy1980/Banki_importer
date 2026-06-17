@@ -1,75 +1,153 @@
-/* Banki UI - Bulk select + delete + Excel export for partner/account/company lists. */
+/* Banki UI - bulk select, delete and CSV export for registry lists. */
 (function () {
   "use strict";
+
   const TARGETS = {
     partnersList: { endpoint: "/api/partners/delete", label: "Partnerek", filenamePrefix: "partnerek" },
     accountsList: { endpoint: "/api/accounts/delete", label: "Bankszámlák", filenamePrefix: "bankszamlak" },
     companiesList: { endpoint: "/api/companies/delete", label: "Cégek", filenamePrefix: "cegek" },
   };
+
+  function listRows(host) {
+    return [...host.querySelectorAll("tbody tr, .account-row")]
+      .filter(row => !row.classList.contains("empty-state"));
+  }
+
+  function rowId(row) {
+    return row.dataset.id
+      || row.querySelector("[data-id]")?.dataset.id
+      || row.querySelector("[data-edit-account]")?.dataset.editAccount
+      || row.querySelector("[data-delete-account]")?.dataset.deleteAccount
+      || row.querySelector("[data-edit-partner]")?.dataset.editPartner
+      || row.querySelector("[data-delete-partner]")?.dataset.deletePartner
+      || row.querySelector("[data-edit-company]")?.dataset.editCompany
+      || row.id
+      || "";
+  }
+
+  function rowValues(row) {
+    if (row.matches("tr")) {
+      return [...row.querySelectorAll("td")].map(cell => (cell.textContent || "").trim());
+    }
+    return [...row.querySelectorAll(":scope > div")]
+      .map(cell => (cell.textContent || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+  }
+
   function attachBar(host, cfg) {
     if (!host || host.dataset.bulkAttached) return;
     host.dataset.bulkAttached = "1";
+
     const bar = document.createElement("div");
     bar.className = "bulk-bar";
     bar.innerHTML = `
-      <label><input type="checkbox" data-bulk-all> Kijelölés</label>
+      <label class="bulk-check"><input type="checkbox" data-bulk-all> <span>Kijelölés</span></label>
       <span class="bulk-count" data-bulk-count>0 kijelölve</span>
       <button type="button" class="ghost" data-bulk-export>Excel export</button>
       <button type="button" class="secondary" data-bulk-delete disabled>Kijelöltek törlése</button>`;
     host.parentElement.insertBefore(bar, host);
-    function rows() { return [...host.querySelectorAll("tbody tr, .account-list-row, .row, li")].filter(r=>r.offsetParent!==null||r.querySelector("td,div")); }
-    function injectCheckboxes() {
-      rows().forEach(r => {
-        if (r.querySelector('[data-bulk-row]')) return;
-        const cb = document.createElement("input");
-        cb.type = "checkbox"; cb.dataset.bulkRow = "1"; cb.style.marginRight = "8px";
-        const id = r.dataset.id || r.querySelector("[data-id]")?.dataset.id || r.id || "";
-        cb.dataset.id = id;
-        const first = r.querySelector("td, div, span");
-        first?.prepend(cb);
-        cb.addEventListener("change", updateCount);
-      });
-    }
+
+    const master = bar.querySelector("[data-bulk-all]");
+    const counter = bar.querySelector("[data-bulk-count]");
+    const deleteButton = bar.querySelector("[data-bulk-delete]");
+
     function updateCount() {
-      const sel = host.querySelectorAll('[data-bulk-row]:checked').length;
-      bar.querySelector("[data-bulk-count]").textContent = `${sel} kijelölve`;
-      bar.querySelector("[data-bulk-delete]").disabled = sel === 0;
+      const checkboxes = [...host.querySelectorAll("[data-bulk-row]")];
+      const selected = checkboxes.filter(checkbox => checkbox.checked);
+      counter.textContent = `${selected.length} kijelölve`;
+      deleteButton.disabled = selected.length === 0;
+      master.checked = checkboxes.length > 0 && selected.length === checkboxes.length;
+      master.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
     }
-    bar.querySelector("[data-bulk-all]").addEventListener("change", e => {
-      host.querySelectorAll('[data-bulk-row]').forEach(cb => cb.checked = e.target.checked);
+
+    function injectCheckboxes() {
+      for (const row of listRows(host)) {
+        if (row.querySelector("[data-bulk-row]")) continue;
+        const id = rowId(row);
+        if (!id) continue;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.dataset.bulkRow = "1";
+        checkbox.dataset.id = id;
+        checkbox.setAttribute("aria-label", "Sor kijelölése");
+        checkbox.addEventListener("change", updateCount);
+
+        if (row.matches("tr")) {
+          const cell = row.querySelector("td");
+          cell?.prepend(checkbox);
+        } else {
+          row.prepend(checkbox);
+        }
+      }
+      updateCount();
+    }
+
+    master.addEventListener("change", event => {
+      host.querySelectorAll("[data-bulk-row]").forEach(checkbox => {
+        checkbox.checked = event.target.checked;
+      });
       updateCount();
     });
-    bar.querySelector("[data-bulk-delete]").addEventListener("click", async () => {
-      const ids = [...host.querySelectorAll('[data-bulk-row]:checked')].map(cb => cb.dataset.id).filter(Boolean);
+
+    deleteButton.addEventListener("click", async () => {
+      const ids = [...host.querySelectorAll("[data-bulk-row]:checked")]
+        .map(checkbox => checkbox.dataset.id)
+        .filter(Boolean);
       if (!ids.length || !confirm(`${ids.length} elem törlése?`)) return;
       const company_id = document.getElementById("companySelect")?.value || "default";
       for (const id of ids) {
-        await fetch(cfg.endpoint, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ id, company_id })});
+        await fetch(cfg.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, company_id }),
+        });
       }
       window.bankiToast?.(`${ids.length} elem törölve.`, "ok");
-      // refresh
-      document.getElementById({partnersList:"partnersBtn",accountsList:"accountsBtn",companiesList:"companiesBtn"}[host.id])?.click();
+      refreshList(host.id);
     });
+
     bar.querySelector("[data-bulk-export]").addEventListener("click", () => exportCsv(host, cfg));
     new MutationObserver(injectCheckboxes).observe(host, { childList: true, subtree: true });
     injectCheckboxes();
   }
-  function exportCsv(host, cfg) {
-    const headers = [...host.querySelectorAll("thead th")].map(th => (th.textContent||"").trim()).filter(Boolean);
-    const rows = [...host.querySelectorAll("tbody tr")].map(tr =>
-      [...tr.querySelectorAll("td")].map(td => (td.textContent||"").replace(/"/g,'""').trim()));
-    if (!rows.length) { window.bankiToast?.("Nincs exportálható sor.", "warn"); return; }
-    const csv = [headers.join(";"), ...rows.map(r => r.map(c => `"${c}"`).join(";"))].join("\r\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${cfg.filenamePrefix}-${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    window.bankiToast?.("Excel/CSV export letöltve.", "ok");
+
+  function refreshList(hostId) {
+    if (hostId === "accountsList" && window.loadAccounts) window.loadAccounts();
+    else if (hostId === "partnersList" && window.loadPartners) window.loadPartners();
+    else if (hostId === "companiesList" && window.loadCompanies) window.loadCompanies();
   }
-  function scan() { Object.entries(TARGETS).forEach(([id, cfg]) => attachBar(document.getElementById(id), cfg)); }
-  document.addEventListener("click", e => {
-    if (e.target?.id && /Btn$/.test(e.target.id)) setTimeout(scan, 120);
+
+  function exportCsv(host, cfg) {
+    const tableHeaders = [...host.querySelectorAll("thead th")]
+      .map(th => (th.textContent || "").trim())
+      .filter(Boolean);
+    const rows = listRows(host).map(rowValues).filter(row => row.length);
+    if (!rows.length) {
+      window.bankiToast?.("Nincs exportálható sor.", "warn");
+      return;
+    }
+    const width = Math.max(...rows.map(row => row.length), tableHeaders.length);
+    const headers = tableHeaders.length ? tableHeaders : Array.from({ length: width }, (_, index) => `Oszlop ${index + 1}`);
+    const csv = [headers, ...rows].map(row =>
+      row.map(value => `"${String(value || "").replace(/"/g, '""')}"`).join(";")
+    ).join("\r\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${cfg.filenamePrefix}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    window.bankiToast?.(`${cfg.label} export letöltve.`, "ok");
+  }
+
+  function scan() {
+    Object.entries(TARGETS).forEach(([id, cfg]) => attachBar(document.getElementById(id), cfg));
+  }
+
+  document.addEventListener("click", event => {
+    if (event.target?.id && /Btn$/.test(event.target.id)) setTimeout(scan, 120);
   });
   if (document.readyState !== "loading") scan();
   else document.addEventListener("DOMContentLoaded", scan);

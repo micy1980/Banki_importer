@@ -16,7 +16,7 @@ class CompaniesDialog extends (window.DialogBase || HTMLElement) {
             <div class="account-actions">
               <button id="saveCompanyBtn" class="primary" type="button">Mentés</button>
             </div>
-            <div id="companyStatus" class="status" role="status" aria-live="polite">A cégválasztó az import célcégét adja meg.</div>
+            <div id="companyStatus" class="status" role="status" aria-live="polite"></div>
           </section>
           <section class="account-card">
             <h3>Rögzített cégek</h3>

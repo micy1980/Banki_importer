@@ -1,5 +1,5 @@
 """
-Lightweight smoke test for the Banki TXT konverter HTTP server.
+Lightweight smoke test for the Banki import konvertáló HTTP server.
 
 Spins up `python app.py`, hits the main routes, and checks status codes
 plus a handful of HTML markers from the redesigned UI. No browser is

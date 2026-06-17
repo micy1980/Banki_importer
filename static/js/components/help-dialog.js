@@ -1,29 +1,33 @@
-/* Sample WebComponent: <help-dialog>
- * Bizonyítja a mintát — a többi dialog átírása fokozatosan jöhet.
- * Ha él, a meglévő helpDialog markup eltávolítható az app.py-ból,
- * és helyette: <help-dialog id="helpDialog"></help-dialog>
- */
+/* <help-dialog id="helpDialog"> */
 class HelpDialog extends HTMLElement {
   connectedCallback() {
     if (this._ready) return;
     this._ready = true;
     this.innerHTML = `
-      <dialog aria-labelledby="helpDialogTitle">
+      <dialog aria-labelledby="helpDialogTitle" class="help-dialog">
         <form method="dialog" class="dialog-form">
           <header class="dialog-header">
-            <h2 id="helpDialogTitle">Súgó</h2>
-            <button id="closeHelpBtn" class="ghost" type="button" data-close aria-label="Bezárás">×</button>
+            <div>
+              <h2 id="helpDialogTitle">Súgó</h2>
+              <p>Import beolvasása, ellenőrzése és banki TXT export készítése.</p>
+            </div>
+            <button id="closeHelpBtn" class="secondary icon-only" type="button" data-close aria-label="Bezárás">×</button>
           </header>
           <div class="dialog-body">
-            <p><strong>Mit csinál ez az eszköz?</strong> Banki Excel/CSV → PAYORD TXT konverter.</p>
-            <ul>
-              <li>Válassz aktív céget.</li>
-              <li>Import → bank + formátum → fájl beolvasása.</li>
-              <li>TXT letöltése.</li>
-            </ul>
-            <p>Backup: <code>/api/backup</code> (vagy a fejléc „Mentés (ZIP)” gombja).</p>
-            <p>Audit log: <code>/api/audit?limit=200</code>.</p>
-            <p>Health: <code>/healthz</code>.</p>
+            <div class="help-grid">
+              <section>
+                <h3>Alap folyamat</h3>
+                <ol>
+                  <li>Válaszd ki az aktív céget.</li>
+                  <li>Import ablakban válassz bankot, formátumot és fájlt.</li>
+                  <li>Beolvasás után a TXT letöltése gomb készíti el az importfájlt.</li>
+                </ol>
+              </section>
+              <section>
+                <h3>Mentés és napló</h3>
+                <p>A Mentés (ZIP) a helyi törzsadatokat és naplót csomagolja. Az audit napló a Napló gombbal nyitható meg.</p>
+              </section>
+            </div>
           </div>
           <footer class="dialog-footer">
             <button class="primary" type="button" data-close>Rendben</button>
@@ -32,8 +36,8 @@ class HelpDialog extends HTMLElement {
       </dialog>
     `;
     const dialog = this.querySelector("dialog");
-    this.querySelectorAll("[data-close]").forEach(b =>
-      b.addEventListener("click", () => dialog.close()),
+    this.querySelectorAll("[data-close]").forEach(button =>
+      button.addEventListener("click", () => dialog.close()),
     );
   }
   showModal() { this.querySelector("dialog")?.showModal(); }

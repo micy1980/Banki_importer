@@ -1,7 +1,7 @@
 {
-  "name": "Banki TXT konverter",
-  "short_name": "Banki TXT",
-  "description": "Erste EDIFACT PAYORD import generálás Excelből.",
+  "name": "Banki import konvertáló",
+  "short_name": "Banki import",
+  "description": "Banki importfájlok készítése Excel vagy CSV adatokból.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

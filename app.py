@@ -839,7 +839,15 @@ HTML_PAGE = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Banki TXT konverter</title>
+  <title>Banki import konvertáló</title>
+  <script>
+    try {
+      if (localStorage.getItem("banki.theme") === "dark") {
+        document.documentElement.classList.add("theme-dark");
+      }
+      document.documentElement.dataset.lang = localStorage.getItem("banki.lang") || "hu";
+    } catch (_) {}
+  </script>
   <link rel="preconnect" href="https://rsms.me/">
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
   <link rel="stylesheet" href="/static/styles-base.css">
@@ -852,9 +860,7 @@ HTML_PAGE = r"""<!doctype html>
   <div class="shell">
     <header>
       <div>
-        <div class="eyebrow">Erste EDIFACT import</div>
-        <h1>Banki TXT konverter</h1>
-        <p>Excel feltöltése, banki formátum választása, majd fix hosszúságú importfájl letöltése.</p>
+        <h1>Banki import konvertáló</h1>
       </div>
       <div class="header-meta">
         <div id="registryPill" class="status-pill warn" role="status" aria-live="polite">MNB tábla: betöltés</div>
@@ -863,7 +869,7 @@ HTML_PAGE = r"""<!doctype html>
     </header>
 
     <section class="commandbar">
-      <div class="command-summary">
+      <div class="command-summary sr-only">
         <strong id="commandFormatName">PAYORD / DO</strong>
         <span id="statusBox" role="status" aria-live="polite">Nyisd meg az Import menüt, válassz fájlt, majd olvasd be.</span>
       </div>
@@ -923,6 +929,7 @@ HTML_PAGE = r"""<!doctype html>
   <import-dialog id="importDialog"></import-dialog>
   <accounts-dialog id="accountsDialog"></accounts-dialog>
   <companies-dialog id="companiesDialog"></companies-dialog>
+  <company-edit-dialog id="companyEditDialog"></company-edit-dialog>
   <partners-dialog id="partnersDialog"></partners-dialog>
   <account-edit-dialog id="accountEditDialog"></account-edit-dialog>
   <partner-edit-dialog id="partnerEditDialog"></partner-edit-dialog>
@@ -942,6 +949,7 @@ window.__CURRENCIES = __CURRENCIES_JSON__;
 <script defer src="/static/js/components/import-dialog.js"></script>
 <script defer src="/static/js/components/accounts-dialog.js"></script>
 <script defer src="/static/js/components/companies-dialog.js"></script>
+<script defer src="/static/js/components/company-edit-dialog.js"></script>
 <script defer src="/static/js/components/partners-dialog.js"></script>
 <script defer src="/static/js/components/account-edit-dialog.js"></script>
 <script defer src="/static/js/companies.js"></script>
@@ -2373,7 +2381,7 @@ def parse_bank_registry(data: bytes, config: dict[str, Any]) -> dict[str, Any]:
 def refresh_bank_registry() -> dict[str, Any]:
     config = load_bank_registry()
     url = clean_cell(config.get("source_url")) or default_bank_registry()["source_url"]
-    request = urllib.request.Request(url, headers={"User-Agent": "Banki TXT konverter"})
+    request = urllib.request.Request(url, headers={"User-Agent": "Banki import konvertalo"})
     with urllib.request.urlopen(request, timeout=30) as response:
         data = response.read()
     parsed = parse_bank_registry(data, config)
@@ -2580,7 +2588,7 @@ def lookup_bic_online(bic: str = "", iban: str = "") -> dict[str, Any]:
     if iban:
         url = f"https://openiban.com/validate/{iban}?getBIC=true&validateBankCode=true"
         try:
-            request = urllib.request.Request(url, headers={"User-Agent": "Banki TXT konverter"})
+            request = urllib.request.Request(url, headers={"User-Agent": "Banki import konvertalo"})
             with urllib.request.urlopen(request, timeout=10) as response:
                 data = json.loads(response.read().decode("utf-8"))
             bank = data.get("bankData") or {}
@@ -2948,9 +2956,18 @@ class Handler(BaseHTTPRequestHandler):
                 name = clean_cell(body.get("name"))
                 if not name:
                     raise ValueError("A cég neve kötelező.")
+                company_id = clean_cell(body.get("id"))
                 companies = load_companies_file()
-                company = {"id": uuid.uuid4().hex, "name": name}
-                companies.append(company)
+                company = None
+                if company_id:
+                    for row in companies:
+                        if row.get("id") == company_id:
+                            row["name"] = name
+                            company = row
+                            break
+                if company is None:
+                    company = {"id": uuid.uuid4().hex, "name": name}
+                    companies.append(company)
                 save_companies_file(companies); audit_log('company.save', company.get('id',''), company.get('name',''))
                 settings = load_settings_file()
                 settings["active_company_id"] = company["id"]

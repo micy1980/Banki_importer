@@ -25,7 +25,7 @@ function autoFillPartnerBankFromHuAccount() {
 function renderPartners(partners) {
   partnersState = partners || [];
   renderListState("partnersList", partnersState, partner => `
-    <div class="account-row">
+    <div class="account-row" data-id="${escapeHtml(partner.id)}">
       <div>
         <strong>${escapeHtml(partner.name || "Nincs név")}</strong>
         <span>${escapeHtml(partner.partner_code || "")}</span>

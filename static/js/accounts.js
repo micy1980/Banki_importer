@@ -99,7 +99,7 @@ function renderAccounts(accounts) {
   accountsState = accounts || [];
   el("accountsCompanyName").textContent = activeCompanyName();
   renderListState("accountsList", accountsState, account => `
-    <div class="account-row">
+    <div class="account-row" data-id="${escapeHtml(account.id)}">
       <div>
         <strong>${escapeHtml(account.bank_name || "Nincs banknév")}</strong>
         <span>${escapeHtml(account.bank_country || "HU")}</span>

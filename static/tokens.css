@@ -1,5 +1,5 @@
 /* =====================================================================
-   Banki TXT konverter - Modern fintech / B2B SaaS redesign overlay
+   Banki import konvertáló - Modern fintech / B2B SaaS redesign overlay
    Loaded AFTER styles-base.css; restyles existing markup without
    changing element IDs or the JS contract.
    ===================================================================== */
@@ -1148,4 +1148,320 @@ html.theme-dark .bulk-bar {
   .account-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============ UI consistency pass ============ */
+html.no-ui-transition *,
+html.no-ui-transition *::before,
+html.no-ui-transition *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+.shell > header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.shell > header h1 {
+  font-size: 22px;
+}
+
+.commandbar {
+  grid-template-columns: 1fr;
+}
+
+.command-actions {
+  justify-content: flex-start;
+}
+
+.command-actions select#companySelect {
+  min-width: 240px;
+}
+
+label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  margin: 0 0 6px;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.field-help-btn {
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  line-height: 18px !important;
+  font-size: 11px !important;
+  box-sizing: border-box;
+}
+
+.status:empty {
+  display: none;
+}
+
+.account-card .status {
+  margin-top: 12px;
+}
+
+accounts-dialog .account-grid,
+partners-dialog .account-grid,
+companies-dialog .account-grid {
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+}
+
+accounts-dialog .account-card,
+partners-dialog .account-card,
+companies-dialog .account-card,
+account-edit-dialog .account-card,
+partner-edit-dialog .account-card,
+company-edit-dialog .account-card {
+  padding: 18px;
+}
+
+accounts-dialog .grid-2,
+partners-dialog .grid-2,
+account-edit-dialog .grid-2,
+partner-edit-dialog .grid-2,
+company-edit-dialog .grid-2 {
+  gap: 12px 16px;
+}
+
+accounts-dialog .account-card:first-child .grid-2 {
+  grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr) minmax(120px, .6fr);
+}
+
+accounts-dialog .account-card:first-child > div[style],
+account-edit-dialog .account-card > div[style],
+partners-dialog .account-card > div[style],
+partner-edit-dialog .account-card > div[style] {
+  margin-top: 12px !important;
+}
+
+account-edit-dialog dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+
+account-edit-dialog .grid-2 {
+  grid-template-columns: minmax(180px, .8fr) minmax(240px, 1.2fr) minmax(120px, .6fr);
+}
+
+partner-edit-dialog dialog,
+company-edit-dialog dialog {
+  width: min(920px, calc(100vw - 32px));
+}
+
+.account-actions {
+  margin-top: 14px;
+}
+
+.account-row {
+  border-radius: var(--r-md);
+}
+
+.account-row .account-actions {
+  justify-content: flex-end;
+}
+
+.bulk-bar {
+  min-height: 44px;
+}
+
+.bulk-bar input[type="checkbox"],
+.account-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  accent-color: var(--brand-700);
+}
+
+.empty-state--compact {
+  padding: 24px;
+}
+
+.empty-state--compact ol {
+  display: none;
+}
+
+.help-dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.help-dialog .dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--ink-100);
+  background: var(--surface-2);
+}
+
+.help-dialog .dialog-header h2 {
+  margin: 0;
+}
+
+.help-dialog .dialog-header p {
+  margin: 4px 0 0;
+  color: var(--ink-500);
+  font-size: 13px;
+}
+
+.help-dialog .help-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .8fr);
+  gap: 14px;
+}
+
+.help-dialog .help-grid section {
+  border: 1px solid var(--ink-100);
+  border-radius: var(--r-md);
+  padding: 14px;
+  background: var(--surface-2);
+}
+
+.help-dialog .help-grid h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink-900);
+}
+
+.help-dialog .help-grid ol,
+.help-dialog .help-grid p {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.help-dialog .dialog-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--ink-100);
+  background: var(--surface);
+}
+
+.icon-only {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+html.theme-dark .help-dialog .dialog-header,
+html.theme-dark .help-dialog .dialog-footer,
+html.theme-dark .help-dialog .help-grid section {
+  border-color: var(--ink-200);
+}
+
+html.theme-dark .help-dialog .help-grid section {
+  background: var(--surface-2);
+}
+
+@media (max-width: 920px) {
+  accounts-dialog .account-grid,
+  partners-dialog .account-grid,
+  companies-dialog .account-grid,
+  accounts-dialog .account-card:first-child .grid-2,
+  account-edit-dialog .grid-2,
+  .help-dialog .help-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dark mode hardening for runtime dialogs and registry lists. */
+html.theme-dark dialog,
+html.theme-dark .dialog-body,
+html.theme-dark .dialog-form {
+  color: var(--ink-900);
+  background: var(--surface);
+}
+
+html.theme-dark .dialog-head,
+html.theme-dark .dialog-header {
+  color: var(--ink-900);
+  background: var(--surface-2);
+  border-color: var(--ink-200);
+}
+
+html.theme-dark .account-card,
+html.theme-dark .metric,
+html.theme-dark .empty-state,
+html.theme-dark .commandbar,
+html.theme-dark .shell > header,
+html.theme-dark .panel,
+html.theme-dark .account-row {
+  color: var(--ink-900);
+  background: var(--surface-2);
+  border-color: var(--ink-200);
+}
+
+html.theme-dark input,
+html.theme-dark select,
+html.theme-dark textarea {
+  color: var(--ink-900);
+  background: var(--surface-3);
+  border-color: var(--ink-200);
+}
+
+html.theme-dark input::placeholder,
+html.theme-dark textarea::placeholder {
+  color: var(--ink-500);
+}
+
+html.theme-dark label,
+html.theme-dark .account-card h3,
+html.theme-dark .dialog-head h2,
+html.theme-dark .dialog-header h2,
+html.theme-dark .account-row strong {
+  color: var(--ink-900);
+}
+
+html.theme-dark .account-row span,
+html.theme-dark .empty-state span,
+html.theme-dark .help-dialog .dialog-header p,
+html.theme-dark .help-dialog .help-grid p,
+html.theme-dark .help-dialog .help-grid ol {
+  color: var(--ink-600);
+}
+
+html.theme-dark .status {
+  color: var(--ink-700);
+  background: var(--surface-3);
+  border-color: var(--ink-200);
+}
+
+html.theme-dark .status.ok {
+  color: #8ef0c1;
+  background: rgba(42, 148, 95, .16);
+  border-color: rgba(84, 214, 143, .45);
+}
+
+html.theme-dark .status.bad {
+  color: #ffadb5;
+  background: rgba(192, 38, 59, .16);
+  border-color: rgba(255, 117, 130, .45);
+}
+
+html.theme-dark .txt-preview pre {
+  color: #e9eefb;
+  background: #070c18;
+}
+
+.command-summary.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }

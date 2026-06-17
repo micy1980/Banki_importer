@@ -1,16 +1,9 @@
-/* samples.js — import minta-tábla, eredmény összefoglaló és hiba lista renderelése.
- * Globálisak: renderSample, renderResultSummary, renderErrors, importEmptyState.
- */
+/* samples.js - import sample table, result summary and error list rendering. */
 function importEmptyState() {
   return `
-    <div class="empty-state" role="status">
+    <div class="empty-state empty-state--compact" role="status">
       <strong>Még nincs beolvasott adat</strong>
-      <span>A konvertálás három rövid lépésből áll. Először válaszd ki az aktív céget, utána tölts fel egy Excel vagy CSV fájlt az Import panelen.</span>
-      <ol>
-        <li>Cég kiválasztása vagy létrehozása.</li>
-        <li>Import panel megnyitása, bank és formátum ellenőrzése.</li>
-        <li>Fájl beolvasása, majd TXT letöltése.</li>
-      </ol>
+      <span>Nyisd meg az Import ablakot, válassz bankot, formátumot és fájlt.</span>
       <div class="empty-state-actions">
         <button class="secondary" type="button" data-open-import>Import megnyitása</button>
         <a class="button-link ghost" href="/template.xlsx" download>Sablon letöltése</a>
@@ -29,10 +22,10 @@ function renderSample() {
   let html = "<table><thead><tr>";
   for (const h of headers) html += `<th>${escapeHtml(h)}</th>`;
   html += "</tr></thead><tbody>";
-  for (const r of rows) {
+  for (const row of rows) {
     html += "<tr>";
-    for (let i = 0; i < headers.length; i++) {
-      html += `<td data-label="${escapeHtml(headers[i])}">${escapeHtml(r[i] ?? "")}</td>`;
+    for (let index = 0; index < headers.length; index++) {
+      html += `<td data-label="${escapeHtml(headers[index])}">${escapeHtml(row[index] ?? "")}</td>`;
     }
     html += "</tr>";
   }
@@ -42,11 +35,12 @@ function renderSample() {
 
 function renderResultSummary(data = null) {
   const format = selectedFormat();
+  const bank = BANKS[el("bankSelect")?.value] || {};
   const rows = [
     [data?.headers?.length ?? "-", "Fejléc"],
     [data?.data_rows ?? "-", "Adatsor"],
-    [data?.errors?.length ?? 0, "Hibás sor"],
-    [format?.short_label ?? "-", "Formátum"]
+    [bank.label || "-", "Bank"],
+    [format?.label || format?.short_label || "-", "Formátum"],
   ];
   el("resultSummary").innerHTML = rows.map(([value, label]) =>
     `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`
@@ -59,7 +53,7 @@ function renderErrors(errors) {
   el("errorArea").innerHTML = `
     <div class="error-summary" role="alert" tabindex="-1">
       <strong>${list.length} javítandó hiba</strong>
-      <ul>${list.map(e => `<li>${escapeHtml(e)}</li>`).join("")}</ul>
+      <ul>${list.map(error => `<li>${escapeHtml(error)}</li>`).join("")}</ul>
     </div>
   `;
   el("errorArea").querySelector(".error-summary")?.focus();

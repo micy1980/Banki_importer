@@ -98,6 +98,14 @@ document.addEventListener("DOMContentLoaded", () => {
   el("closeImportBtn").addEventListener("click", () => closeDialog("importDialog"));
   el("closeAccountsBtn").addEventListener("click", () => closeDialog("accountsDialog"));
   el("closeCompaniesBtn").addEventListener("click", () => closeDialog("companiesDialog"));
+  el("closeCompanyEditBtn").addEventListener("click", () => {
+    editingCompanyId = "";
+    closeDialog("companyEditDialog");
+  });
+  el("cancelCompanyEditBtn").addEventListener("click", () => {
+    editingCompanyId = "";
+    closeDialog("companyEditDialog");
+  });
   el("closePartnersBtn").addEventListener("click", () => closeDialog("partnersDialog"));
   el("closePartnerEditBtn").addEventListener("click", () => {
     editingPartnerId = "";
@@ -120,6 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
   el("saveAccountEditBtn").addEventListener("click", () => saveEditedAccount().catch(err => setAccountEditStatus(err.message, "bad")));
   el("importAccountsBtn").addEventListener("click", () => importAccounts().catch(err => setAccountStatus(err.message, "bad")));
   el("saveCompanyBtn").addEventListener("click", () => saveCompany().catch(err => setCompanyStatus(err.message, "bad")));
+  el("saveCompanyEditBtn").addEventListener("click", () => saveEditedCompany().catch(err => setCompanyEditStatus(err.message, "bad")));
   el("savePartnerBtn").addEventListener("click", () => savePartner().catch(err => setPartnerStatus(err.message, "bad")));
   el("savePartnerEditBtn").addEventListener("click", () => saveEditedPartner().catch(err => setPartnerEditStatus(err.message, "bad")));
   el("importPartnersBtn").addEventListener("click", () => importPartners().catch(err => setPartnerStatus(err.message, "bad")));
@@ -148,11 +157,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (deleteId) deleteAccount(deleteId).catch(err => setAccountStatus(err.message, "bad"));
   });
   el("companiesList").addEventListener("click", event => {
-    const companyId = event.target?.dataset?.setCompany;
-    if (companyId) {
-      el("companySelect").value = companyId;
-      changeCompany(companyId).catch(err => setCompanyStatus(err.message, "bad"));
-    }
+    const editId = event.target?.dataset?.editCompany;
+    if (editId) editCompany(editId);
   });
   el("partnersList").addEventListener("click", event => {
     const editId = event.target?.dataset?.editPartner;

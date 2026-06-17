@@ -16,7 +16,7 @@
     dlg.id = "onboardDialog"; dlg.className = "preview-dialog onboard-dialog";
     let step = 0;
     const steps = [
-      { title: "Üdv a Banki TXT konverterben!",
+      { title: "Üdv a Banki import konvertálóban!",
         body: "Három lépésben végigvezetünk az első importon. Ez bármikor kihagyható.",
         cta: "Kezdjük" },
       { title: "1. Cég létrehozása",

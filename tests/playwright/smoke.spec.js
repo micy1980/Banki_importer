@@ -1,10 +1,10 @@
 // @ts-check
 const { test, expect } = require("@playwright/test");
 
-test.describe("Banki TXT konverter - E2E smoke", () => {
+test.describe("Banki import konvertáló - E2E smoke", () => {
   test("loads home and renders all major regions", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/Banki TXT konverter/);
+    await expect(page).toHaveTitle(/Banki import konvertáló/);
     await expect(page.locator("#convertBtn")).toBeVisible();
     await expect(page.locator("#registryPill")).toBeVisible();
     await expect(page.locator("#previewBox")).toBeVisible();

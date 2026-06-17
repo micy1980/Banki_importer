@@ -88,6 +88,7 @@ function applySelectedFormat() {
   el("encoding").value = settings.encoding || format.default_encoding || "cp1250";
   if (settings.identifier_date) el("identifierDate").value = settings.identifier_date;
   buildMappings();
+  renderResultSummary(currentInspect);
   updateConvertAction();
   saveSettingsDebounced();
 }
@@ -239,7 +240,9 @@ async function inspectFile() {
     updateConvertAction();
     renderResultSummary(data);
     renderErrors([]);
-    setStatus(`${data.headers.length} fejléc beolvasva, ${data.data_rows} adatsor észlelve.`, "ok");
+    const bank = BANKS[el("bankSelect").value]?.label || el("bankSelect").value;
+    const format = selectedFormat()?.label || selectedFormat()?.short_label || el("formatSelect").value;
+    setStatus(`${bank} - ${format}: ${data.headers.length} fejléc beolvasva, ${data.data_rows} adatsor észlelve.`, "ok");
     saveSettingsDebounced();
   } catch (err) {
     currentInspect = null;

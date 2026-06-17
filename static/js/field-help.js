@@ -1,43 +1,49 @@
-/* Banki UI - Inline help icons (?) for form fields. */
+/* Banki UI - compact inline help icons for form fields. */
 (function () {
   "use strict";
+
   const HELP = {
-    ownAccountNumber: "Magyar 3×8 számlaszám (kötőjellel) vagy HU IBAN. A 8 jegyű prefixből töltjük a bank nevét.",
-    editAccountNumber: "Magyar 3×8 számlaszám vagy HU IBAN. MOD-97 IBAN-ellenőrzés.",
-    ownBankCountry: "Bank országkódja ISO 3166 alpha-2 szerint. Belföldi esetben HU.",
-    editBankCountry: "Bank országkódja ISO 3166 alpha-2 szerint.",
-    ownCurrency: "ISO 4217 devizakód (HUF, EUR, USD…).",
+    ownAccountNumber: "Magyar 3x8 számlaszám kötőjelekkel, vagy HU IBAN. Magyar számlánál a banknév az első 8 számjegyből tölthető.",
+    editAccountNumber: "Magyar 3x8 számlaszám vagy HU IBAN. Az IBAN MOD-97 algoritmussal ellenőrzött.",
+    ownBankCountry: "A bank országkódja. Belföldi számlánál HU.",
+    editBankCountry: "A bank országkódja. Belföldi számlánál HU.",
+    ownCurrency: "ISO 4217 devizakód, például HUF, EUR vagy USD.",
     editCurrency: "ISO 4217 devizakód.",
-    partnerCode: "Saját könyvelési azonosító — tetszőleges, max. 35 karakter.",
-    partnerName: "Cégszerű név, max. 70 karakter. EDIFACT-ban a NAD szegmensbe kerül.",
-    partnerAccount: "Magyar 3×8 belföldi számlaszám. SWIFT mellett opcionális.",
-    partnerIban: "IBAN formátum: országkód + 2 ellenőrző + max 30 karakter.",
-    partnerSwift: "SWIFT/BIC: 8 vagy 11 karakter, A-Z és 0-9.",
-    partnerCountry: "ISO 3166 alpha-2 (HU, DE, AT…).",
-    encoding: "TXT karakterkészlet. Magyar banki importnál windows-1250 az alap. UTF-8 csak ha a bank elfogadja.",
-    identifierDate: "Ha az Excelben nincs 14 jegyű azonosító, ebből generálunk: ÉÉÉÉHHNN + 6 jegyű sorszám.",
-    bankSelect: "A kiválasztott bank szűri a formátum választékot.",
-    formatSelect: "Banki fix-hosszúságú TXT séma. PAYORD DO = forint, IN = deviza.",
+    partnerCode: "Saját könyvelési vagy törzsadat-azonosító.",
+    partnerName: "A partner neve.",
+    partnerAccount: "Magyar 3x8 belföldi számlaszám.",
+    partnerIban: "Nemzetközi IBAN számlaszám. Országonként eltérő hosszúságú lehet.",
+    partnerSwift: "SWIFT/BIC: 8 vagy 11 karakter.",
+    partnerCountry: "ISO országkód, például HU, DE vagy AT.",
+    encoding: "A letöltött TXT karakterkódolása. Magyar banki importnál általában windows-1250.",
+    identifierDate: "Ha az Excelben nincs azonosító, ebből a dátumból készül a generált azonosító.",
+    bankSelect: "A választott bank szűri az elérhető importformátumokat.",
+    formatSelect: "A banknál használható importformátum.",
   };
+
   function attach(id, text) {
     const input = document.getElementById(id);
     if (!input || input.dataset.helpAttached) return;
     const label = document.querySelector(`label[for="${id}"]`);
     if (!label) return;
-    const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "field-help-btn";
-    btn.setAttribute("aria-label", `Súgó: ${label.textContent.trim()}`);
-    btn.title = text;
-    btn.textContent = "?";
-    label.appendChild(document.createTextNode(" "));
-    label.appendChild(btn);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "field-help-btn";
+    button.setAttribute("aria-label", `Súgó: ${label.textContent.trim()}`);
+    button.title = text;
+    button.textContent = "?";
+    label.appendChild(button);
     input.dataset.helpAttached = "1";
   }
-  function attachAll() { Object.entries(HELP).forEach(([id, text]) => attach(id, text)); }
+
+  function attachAll() {
+    Object.entries(HELP).forEach(([id, text]) => attach(id, text));
+  }
+
   if (document.readyState !== "loading") attachAll();
   else document.addEventListener("DOMContentLoaded", attachAll);
-  // re-run on dialog open events
-  document.addEventListener("click", e => {
-    if (e.target?.id && /Btn$/.test(e.target.id)) setTimeout(attachAll, 60);
+  document.addEventListener("click", event => {
+    if (event.target?.id && /Btn$/.test(event.target.id)) setTimeout(attachAll, 60);
   });
 })();
