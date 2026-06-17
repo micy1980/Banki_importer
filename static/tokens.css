@@ -913,3 +913,239 @@ html.theme-dark .status-pill.ok {
   color: #86efac;
   border-color: rgba(22, 163, 74, .35);
 }
+
+/* ============ Dialog layout repair ============ */
+import-dialog dialog,
+accounts-dialog dialog,
+partners-dialog dialog,
+companies-dialog dialog,
+account-edit-dialog dialog,
+partner-edit-dialog dialog,
+help-dialog dialog {
+  box-sizing: border-box;
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+}
+
+import-dialog dialog {
+  width: min(920px, calc(100vw - 32px));
+  max-width: 920px;
+}
+
+accounts-dialog dialog,
+partners-dialog dialog,
+companies-dialog dialog {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: 1120px;
+}
+
+import-dialog .dialog-body,
+accounts-dialog .dialog-body,
+partners-dialog .dialog-body,
+companies-dialog .dialog-body,
+account-edit-dialog .dialog-body,
+partner-edit-dialog .dialog-body,
+help-dialog .dialog-body {
+  box-sizing: border-box;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+}
+
+import-dialog .import-grid,
+accounts-dialog .account-grid,
+partners-dialog .account-grid,
+companies-dialog .account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+import-dialog .import-grid > *,
+accounts-dialog .account-grid > *,
+partners-dialog .account-grid > *,
+companies-dialog .account-grid > *,
+accounts-dialog .grid-2 > *,
+partners-dialog .grid-2 > *,
+companies-dialog .grid-2 > * {
+  min-width: 0;
+}
+
+import-dialog .import-grid .full-row,
+import-dialog .import-profiles,
+accounts-dialog .account-card:last-child,
+partners-dialog .account-card:last-child,
+companies-dialog .account-card:last-child {
+  grid-column: 1 / -1;
+}
+
+import-dialog label,
+accounts-dialog label,
+partners-dialog label,
+companies-dialog label,
+account-edit-dialog label,
+partner-edit-dialog label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+import-dialog .field-help-btn,
+accounts-dialog .field-help-btn,
+partners-dialog .field-help-btn,
+companies-dialog .field-help-btn,
+account-edit-dialog .field-help-btn,
+partner-edit-dialog .field-help-btn {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin-left: 0;
+  line-height: 1;
+}
+
+import-dialog input,
+import-dialog select,
+accounts-dialog input,
+accounts-dialog select,
+partners-dialog input,
+partners-dialog select,
+companies-dialog input,
+companies-dialog select,
+account-edit-dialog input,
+account-edit-dialog select,
+partner-edit-dialog input,
+partner-edit-dialog select {
+  min-height: 40px;
+}
+
+import-dialog .dropzone,
+accounts-dialog .dropzone,
+partners-dialog .dropzone {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+}
+
+import-dialog .dropzone input[type="file"],
+accounts-dialog .dropzone input[type="file"],
+partners-dialog .dropzone input[type="file"] {
+  margin-top: 0;
+  min-height: 42px;
+}
+
+import-dialog .import-profiles .profile-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+import-dialog .import-actions,
+accounts-dialog .account-actions,
+partners-dialog .account-actions,
+companies-dialog .account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+accounts-dialog .grid-2,
+partners-dialog .grid-2,
+companies-dialog .grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 14px;
+}
+
+accounts-dialog .account-card,
+partners-dialog .account-card,
+companies-dialog .account-card {
+  min-width: 0;
+}
+
+.list-filter {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.list-filter input[type="search"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.bulk-bar {
+  flex-wrap: wrap;
+  border: 1px solid var(--ink-100);
+}
+
+.bulk-bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.bulk-bar .bulk-count {
+  min-width: 72px;
+}
+
+.account-list {
+  min-width: 0;
+}
+
+.account-row {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 1fr) auto;
+  min-width: 0;
+}
+
+.account-row > * {
+  min-width: 0;
+}
+
+.account-row strong,
+.account-row span {
+  overflow-wrap: anywhere;
+}
+
+html.theme-dark import-dialog .dropzone input[type="file"],
+html.theme-dark accounts-dialog .dropzone input[type="file"],
+html.theme-dark partners-dialog .dropzone input[type="file"] {
+  background: var(--surface-2);
+}
+
+html.theme-dark .list-filter input[type="search"] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-900);
+}
+
+html.theme-dark .bulk-bar {
+  border-color: var(--ink-200);
+}
+
+@media (max-width: 760px) {
+  import-dialog .import-profiles .profile-row {
+    grid-template-columns: 1fr;
+  }
+
+  .bulk-bar {
+    align-items: stretch;
+  }
+
+  .bulk-bar .bulk-count {
+    margin-right: 0;
+  }
+
+  .bulk-bar button {
+    flex: 1 1 180px;
+  }
+
+  .account-row {
+    grid-template-columns: 1fr;
+  }
+}
