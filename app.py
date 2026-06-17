@@ -827,11 +827,11 @@ HTML_PAGE = r"""<!doctype html>
       --surface: #ffffff;
       --surface-2: #f8fafc;
       --ink: #162033;
-      --muted: #64748b;
+      --muted: #475569;
       --line: #d9e1ec;
       --line-strong: #c9d3df;
-      --accent: #bd2234;
-      --accent-dark: #941827;
+      --accent: #a3192c;
+      --accent-dark: #841623;
       --accent-soft: #fff1f3;
       --accent-2: #0f766e;
       --accent-2-soft: #edf9f6;
@@ -867,7 +867,14 @@ HTML_PAGE = r"""<!doctype html>
       text-transform: uppercase;
       margin-bottom: 7px;
     }
-    .badge {
+    .header-meta {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .badge, .status-pill {
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #fff;
@@ -878,6 +885,24 @@ HTML_PAGE = r"""<!doctype html>
       white-space: nowrap;
       box-shadow: var(--shadow-soft);
     }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      box-shadow: none;
+    }
+    .status-pill::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .status-pill.ok { color: var(--accent-2); border-color: rgba(15,118,110,.28); background: var(--accent-2-soft); }
+    .status-pill.ok::before { background: var(--accent-2); }
+    .status-pill.warn { color: var(--warn); border-color: rgba(146,89,10,.28); background: #fff9ec; }
+    .status-pill.warn::before { background: var(--warn); }
     .layout { display: grid; gap: 18px; align-items: start; }
     .panel {
       background: var(--surface);
@@ -910,11 +935,13 @@ HTML_PAGE = r"""<!doctype html>
     .command-summary span[data-kind="warn"] { color: var(--warn); }
     .command-summary span[data-kind="bad"] { color: var(--bad); }
     .command-actions {
-      display: grid;
-      grid-template-columns: repeat(5, auto);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
       gap: 8px;
       align-items: center;
     }
+    .command-actions select { width: auto; min-width: 190px; }
     .import-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -1039,6 +1066,19 @@ HTML_PAGE = r"""<!doctype html>
       font-size: 13px;
       line-height: 1.45;
     }
+    .empty-state ol {
+      margin: 4px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .empty-state-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
     .loading-row {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -1081,7 +1121,7 @@ HTML_PAGE = r"""<!doctype html>
     button.primary:hover:not(:disabled) { background: var(--accent-dark); }
     button.secondary, .button-link.secondary { background: #fff; border-color: var(--line-strong); color: var(--ink); }
     button.ghost, .button-link.ghost { background: var(--surface-2); border-color: var(--line); color: #334155; }
-    button:disabled { cursor: not-allowed; opacity: .45; transform: none; box-shadow: none; }
+    button:disabled { cursor: not-allowed; opacity: .55; transform: none; box-shadow: none; }
     button[data-loading="true"]::after {
       content: "";
       width: 12px;
@@ -1162,6 +1202,15 @@ HTML_PAGE = r"""<!doctype html>
     .metric strong { display: block; font-size: 22px; margin-bottom: 3px; line-height: 1.05; }
     .metric span { color: var(--muted); font-size: 12px; font-weight: 650; }
     .error-list { display: grid; gap: 8px; }
+    .error-summary {
+      border: 1px solid rgba(165,29,42,.28);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--bad-soft);
+      color: var(--bad);
+    }
+    .error-summary strong { display:block; margin-bottom: 8px; }
+    .error-summary ul { margin: 0; padding-left: 18px; }
     .error-item { border: 1px solid rgba(165,29,42,.25); border-radius: 6px; padding: 9px; background: #fff4f5; color: var(--bad); font-size: 13px; }
     dialog {
       width: min(1120px, calc(100vw - 28px));
@@ -1203,16 +1252,45 @@ HTML_PAGE = r"""<!doctype html>
     @media (max-width: 880px) {
       .shell { padding: 16px 12px 28px; }
       .commandbar { grid-template-columns: 1fr; }
-      .command-actions { grid-template-columns: 1fr 1fr; }
-      .command-actions .wide-action { grid-column: 1 / -1; }
+      .command-actions { justify-content: stretch; }
+      .command-actions > * { flex: 1 1 calc(50% - 8px); }
+      .command-actions select, .command-actions .primary { flex-basis: 100%; width: 100%; }
       .import-grid { grid-template-columns: 1fr; }
       header { display: block; }
-      .badge { display: inline-block; margin-top: 12px; }
+      .header-meta { justify-content: flex-start; margin-top: 12px; }
+      .badge { display: inline-block; }
       .mapping { grid-template-columns: 1fr; gap: 7px; }
       .spec { grid-template-columns: 1fr; }
       .result-grid { grid-template-columns: 1fr; }
       .account-grid { grid-template-columns: 1fr; }
       .account-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .sample-wrap { border: 0; background: transparent; overflow: visible; }
+      .sample-wrap table, .sample-wrap thead, .sample-wrap tbody, .sample-wrap tr, .sample-wrap th, .sample-wrap td {
+        display: block;
+        min-width: 0;
+        width: 100%;
+      }
+      .sample-wrap thead { display: none; }
+      .sample-wrap tr {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        margin-bottom: 8px;
+        overflow: hidden;
+      }
+      .sample-wrap td {
+        display: grid;
+        grid-template-columns: minmax(110px, 38%) 1fr;
+        gap: 8px;
+        border-bottom: 1px solid #edf0f3;
+      }
+      .sample-wrap td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-weight: 750;
+      }
     }
   </style>
 </head>
@@ -1224,7 +1302,10 @@ HTML_PAGE = r"""<!doctype html>
         <h1>Banki TXT konverter</h1>
         <p>Excel feltöltése, banki formátum választása, majd fix hosszúságú importfájl letöltése.</p>
       </div>
-      <div id="formatBadge" class="badge">PAYORD / DO · 941 karakter soronként CR/LF-fel</div>
+      <div class="header-meta">
+        <div id="registryPill" class="status-pill warn" role="status" aria-live="polite">MNB tábla: betöltés</div>
+        <div id="formatBadge" class="badge">PAYORD / DO · 941 karakter soronként CR/LF-fel</div>
+      </div>
     </header>
 
     <section class="commandbar">
@@ -1238,7 +1319,8 @@ HTML_PAGE = r"""<!doctype html>
         <button id="openImportBtn" class="secondary" type="button">Import</button>
         <button id="accountsBtn" class="secondary" type="button">Saját bankszámlák</button>
         <button id="partnersBtn" class="secondary" type="button">Partnerek</button>
-        <button id="convertBtn" class="primary" disabled>TXT letöltése</button>
+        <button id="convertBtn" class="primary" disabled aria-describedby="convertDisabledReason">TXT letöltése</button>
+        <span id="convertDisabledReason" class="sr-only">Tölts fel fájlt és olvasd be az importot.</span>
         <a id="templateLink" class="button-link ghost" href="/template.xlsx" download>Excel sablon</a>
         <button id="helpBtn" class="ghost" type="button">? Súgó</button>
       </div>
@@ -1256,7 +1338,7 @@ HTML_PAGE = r"""<!doctype html>
           <div id="errorArea" class="error-list" style="margin-top:14px;"></div>
           <div style="margin-top:14px;">
             <h3 style="font-size:14px;margin:0 0 8px;">Beolvasott minta</h3>
-            <div id="sampleArea" class="sample-wrap"><table><tbody><tr><td>Nincs minta.</td></tr></tbody></table></div>
+            <div id="sampleArea" class="sample-wrap"></div>
           </div>
         </div>
       </main>
@@ -1546,10 +1628,65 @@ let partnersState = [];
 let registryRows = [];
 let lastAutoBankName = "";
 let lastEditAutoBankName = "";
+const dialogTriggers = new WeakMap();
 
 const el = id => document.getElementById(id);
 const today = new Date();
 el("identifierDate").value = today.toISOString().slice(0, 10);
+
+function focusableElements(root) {
+  return [...root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+    .filter(item => item.offsetParent !== null || item === document.activeElement);
+}
+
+function openDialog(dialogId, trigger = document.activeElement) {
+  const dialog = el(dialogId);
+  if (!dialog) return;
+  dialogTriggers.set(dialog, trigger);
+  dialog.showModal();
+  requestAnimationFrame(() => {
+    const first = focusableElements(dialog)[0];
+    (first || dialog).focus();
+  });
+}
+
+function closeDialog(dialogId) {
+  const dialog = el(dialogId);
+  if (!dialog?.open) return;
+  dialog.close();
+}
+
+function setupDialogA11y() {
+  document.querySelectorAll("dialog").forEach(dialog => {
+    if (dialog.dataset.a11yReady) return;
+    dialog.dataset.a11yReady = "1";
+    dialog.setAttribute("tabindex", "-1");
+    dialog.addEventListener("keydown", event => {
+      if (event.key !== "Tab") return;
+      const items = focusableElements(dialog);
+      if (!items.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    dialog.addEventListener("close", () => {
+      const trigger = dialogTriggers.get(dialog);
+      if (trigger && document.contains(trigger)) {
+        trigger.focus();
+      }
+    });
+  });
+}
 
 function populateBanks() {
   const bankSelect = el("bankSelect");
@@ -1698,6 +1835,7 @@ function applySelectedFormat() {
   el("encoding").value = settings.encoding || format.default_encoding || "cp1250";
   if (settings.identifier_date) el("identifierDate").value = settings.identifier_date;
   buildMappings();
+  updateConvertAction();
   saveSettingsDebounced();
 }
 
@@ -1751,6 +1889,28 @@ function setStatus(text, kind = "") {
   box.dataset.kind = kind;
 }
 
+function setDisabledReason(buttonId, reason = "") {
+  const button = el(buttonId);
+  const reasonBox = el(`${buttonId.replace("Btn", "")}DisabledReason`);
+  if (!button) return;
+  const disabled = Boolean(reason);
+  button.disabled = disabled;
+  button.title = reason || "";
+  button.setAttribute("aria-disabled", disabled ? "true" : "false");
+  if (reasonBox) reasonBox.textContent = reason || "";
+}
+
+function getConvertDisabledReason() {
+  if (!el("fileInput").files[0]) return "Tölts fel egy Excel vagy CSV fájlt az Import panelen.";
+  if (!currentInspect) return "Olvasd be a fájlt, hogy ellenőrizni lehessen a fejlécet és a sorokat.";
+  if (requiredMappingMissing()) return "Ellenőrizd a kötelező Excel oszlop-hozzárendeléseket a Haladó részben.";
+  return "";
+}
+
+function updateConvertAction() {
+  setDisabledReason("convertBtn", getConvertDisabledReason());
+}
+
 function normalise(s) {
   return String(s || "")
     .toLowerCase()
@@ -1787,6 +1947,24 @@ async function fetchJson(url, options = {}) {
 
 function emptyState(title, description) {
   return `<div class="empty-state" role="status"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(description)}</span></div>`;
+}
+
+function importEmptyState() {
+  return `
+    <div class="empty-state" role="status">
+      <strong>Még nincs beolvasott adat</strong>
+      <span>A konvertálás három rövid lépésből áll. Először válaszd ki az aktív céget, utána tölts fel egy Excel vagy CSV fájlt az Import panelen.</span>
+      <ol>
+        <li>Cég kiválasztása vagy létrehozása.</li>
+        <li>Import panel megnyitása, bank és formátum ellenőrzése.</li>
+        <li>Fájl beolvasása, majd TXT letöltése.</li>
+      </ol>
+      <div class="empty-state-actions">
+        <button class="secondary" type="button" data-open-import>Import megnyitása</button>
+        <a class="button-link ghost" href="/template.xlsx" download>Sablon letöltése</a>
+      </div>
+    </div>
+  `;
 }
 
 function loadingRows(label = "Betöltés...") {
@@ -1915,7 +2093,7 @@ function renderSample() {
   const headers = currentInspect?.headers || [];
   const rows = currentInspect?.sample || [];
   if (!headers.length) {
-    el("sampleArea").innerHTML = `<table><tbody><tr><td>Nincs minta.</td></tr></tbody></table>`;
+    el("sampleArea").innerHTML = importEmptyState();
     return;
   }
   let html = "<table><thead><tr>";
@@ -1923,7 +2101,7 @@ function renderSample() {
   html += "</tr></thead><tbody>";
   for (const r of rows) {
     html += "<tr>";
-    for (let i = 0; i < headers.length; i++) html += `<td>${escapeHtml(r[i] ?? "")}</td>`;
+    for (let i = 0; i < headers.length; i++) html += `<td data-label="${escapeHtml(headers[i])}">${escapeHtml(r[i] ?? "")}</td>`;
     html += "</tr>";
   }
   html += "</tbody></table>";
@@ -1934,6 +2112,7 @@ async function inspectFile() {
   const file = el("fileInput").files[0];
   if (!file) {
     setStatus("Előbb válassz ki egy fájlt.", "warn");
+    updateConvertAction();
     return;
   }
   const form = new FormData();
@@ -1946,16 +2125,19 @@ async function inspectFile() {
     buildMappings();
     el("mappingDetails").open = requiredMappingMissing();
     renderSample();
-    el("convertBtn").disabled = false;
+    updateConvertAction();
     renderResultSummary(data);
     renderErrors([]);
     setStatus(`${data.headers.length} fejléc beolvasva, ${data.data_rows} adatsor észlelve.`, "ok");
     saveSettingsDebounced();
   } catch (err) {
+    currentInspect = null;
+    updateConvertAction();
     setStatus(err.message || "Nem sikerült beolvasni a fájlt.", "bad");
     renderErrors([err.message || "Nem sikerült beolvasni a fájlt."]);
   } finally {
     setButtonLoading("inspectBtn", false);
+    updateConvertAction();
   }
 }
 
@@ -1964,6 +2146,7 @@ function renderResultSummary(data = null) {
   const rows = [
     [data?.headers?.length ?? "-", "Fejléc"],
     [data?.data_rows ?? "-", "Adatsor"],
+    [data?.errors?.length ?? 0, "Hibás sor"],
     [format?.short_label ?? "-", "Formátum"]
   ];
   el("resultSummary").innerHTML = rows.map(([value, label]) =>
@@ -1973,7 +2156,17 @@ function renderResultSummary(data = null) {
 
 function renderErrors(errors) {
   const list = Array.isArray(errors) ? errors : String(errors || "").split("\n").filter(Boolean);
-  el("errorArea").innerHTML = list.map(e => `<div class="error-item">${escapeHtml(e)}</div>`).join("");
+  if (!list.length) {
+    el("errorArea").innerHTML = "";
+    return;
+  }
+  el("errorArea").innerHTML = `
+    <div class="error-summary" role="alert" tabindex="-1">
+      <strong>${list.length} javítandó hiba</strong>
+      <ul>${list.map(e => `<li>${escapeHtml(e)}</li>`).join("")}</ul>
+    </div>
+  `;
+  el("errorArea").querySelector(".error-summary")?.focus();
 }
 
 function clientFormatHuAccount(value) {
@@ -2145,7 +2338,7 @@ function editAccount(id) {
   lastEditAutoBankName = account.bank_name || "";
   updateEditAccountFormatting();
   setAccountEditStatus("Szerkesztésre megnyitva.");
-  el("accountEditDialog").showModal();
+  openDialog("accountEditDialog");
 }
 
 async function saveEditedAccount() {
@@ -2330,7 +2523,7 @@ function editPartner(id) {
   el("editPartnerBankName").value = partner.bank_name || "";
   el("editPartnerBankAddress").value = partner.bank_address || "";
   setPartnerEditStatus("Szerkesztésre megnyitva.");
-  el("partnerEditDialog").showModal();
+  openDialog("partnerEditDialog");
 }
 
 function collectEditedPartnerPayload() {
@@ -2401,6 +2594,14 @@ function renderRegistry(registry) {
   const box = el("registryMeta");
   box.textContent = meta.join(" ");
   box.className = `status ${registry.startup_ok === false ? "warn" : "ok"}`;
+  const pill = el("registryPill");
+  if (pill) {
+    pill.textContent = registry.startup_ok === false
+      ? "MNB tábla: helyi adat"
+      : `MNB tábla: ${count || 0} prefix`;
+    pill.className = `status-pill ${registry.startup_ok === false ? "warn" : "ok"}`;
+    pill.title = meta.join(" ");
+  }
 }
 
 async function loadRegistry() {
@@ -2469,6 +2670,7 @@ async function convertFile() {
     saveSettingsDebounced();
   } finally {
     setButtonLoading("convertBtn", false);
+    updateConvertAction();
   }
 }
 
@@ -2476,41 +2678,53 @@ el("inspectBtn").addEventListener("click", () => inspectFile().catch(err => setS
 el("convertBtn").addEventListener("click", () => convertFile().catch(err => setStatus(err.message, "bad")));
 el("bankSelect").addEventListener("change", populateFormats);
 el("formatSelect").addEventListener("change", applySelectedFormat);
-el("openImportBtn").addEventListener("click", () => el("importDialog").showModal());
-el("companiesBtn").addEventListener("click", async () => {
-  el("companiesDialog").showModal();
+el("fileInput").addEventListener("change", () => {
+  currentInspect = null;
+  renderSample();
+  renderResultSummary();
+  renderErrors([]);
+  updateConvertAction();
+});
+el("sampleArea").addEventListener("click", event => {
+  if (event.target?.closest("[data-open-import]")) {
+    openDialog("importDialog", event.target.closest("[data-open-import]"));
+  }
+});
+el("openImportBtn").addEventListener("click", event => openDialog("importDialog", event.currentTarget));
+el("companiesBtn").addEventListener("click", async event => {
+  openDialog("companiesDialog", event.currentTarget);
   await loadCompanies();
 });
-el("partnersBtn").addEventListener("click", async () => {
-  el("partnersDialog").showModal();
+el("partnersBtn").addEventListener("click", async event => {
+  openDialog("partnersDialog", event.currentTarget);
   await Promise.all([loadPartners(), loadRegistry()]);
 });
-el("accountsBtn").addEventListener("click", async () => {
-  el("accountsDialog").showModal();
+el("accountsBtn").addEventListener("click", async event => {
+  openDialog("accountsDialog", event.currentTarget);
   await Promise.all([loadAccounts(), loadRegistry()]);
 });
-el("helpBtn").addEventListener("click", () => el("helpDialog").showModal());
-el("closeImportBtn").addEventListener("click", () => el("importDialog").close());
-el("closeAccountsBtn").addEventListener("click", () => el("accountsDialog").close());
-el("closeCompaniesBtn").addEventListener("click", () => el("companiesDialog").close());
-el("closePartnersBtn").addEventListener("click", () => el("partnersDialog").close());
+el("helpBtn").addEventListener("click", event => openDialog("helpDialog", event.currentTarget));
+el("closeImportBtn").addEventListener("click", () => closeDialog("importDialog"));
+el("closeAccountsBtn").addEventListener("click", () => closeDialog("accountsDialog"));
+el("closeCompaniesBtn").addEventListener("click", () => closeDialog("companiesDialog"));
+el("closePartnersBtn").addEventListener("click", () => closeDialog("partnersDialog"));
 el("closePartnerEditBtn").addEventListener("click", () => {
   editingPartnerId = "";
-  el("partnerEditDialog").close();
+  closeDialog("partnerEditDialog");
 });
 el("cancelPartnerEditBtn").addEventListener("click", () => {
   editingPartnerId = "";
-  el("partnerEditDialog").close();
+  closeDialog("partnerEditDialog");
 });
 el("closeAccountEditBtn").addEventListener("click", () => {
   editingAccountId = "";
-  el("accountEditDialog").close();
+  closeDialog("accountEditDialog");
 });
 el("cancelAccountEditBtn").addEventListener("click", () => {
   editingAccountId = "";
-  el("accountEditDialog").close();
+  closeDialog("accountEditDialog");
 });
-el("closeHelpBtn").addEventListener("click", () => el("helpDialog").close());
+el("closeHelpBtn").addEventListener("click", () => closeDialog("helpDialog"));
 el("saveAccountBtn").addEventListener("click", () => saveAccount().catch(err => setAccountStatus(err.message, "bad")));
 el("saveAccountEditBtn").addEventListener("click", () => saveEditedAccount().catch(err => setAccountEditStatus(err.message, "bad")));
 el("importAccountsBtn").addEventListener("click", () => importAccounts().catch(err => setAccountStatus(err.message, "bad")));
@@ -2607,7 +2821,11 @@ el("useGuessesBtn").addEventListener("click", () => {
   saveSettingsDebounced();
 });
 el("mappingArea").addEventListener("change", saveSettingsDebounced);
-el("mappingArea").addEventListener("input", saveSettingsDebounced);
+el("mappingArea").addEventListener("change", updateConvertAction);
+el("mappingArea").addEventListener("input", () => {
+  saveSettingsDebounced();
+  updateConvertAction();
+});
 el("encoding").addEventListener("change", saveSettingsDebounced);
 el("identifierDate").addEventListener("change", saveSettingsDebounced);
 
@@ -2624,7 +2842,17 @@ el("identifierDate").addEventListener("change", saveSettingsDebounced);
   if (FORMATS[currentSettings.active_format]) el("formatSelect").value = currentSettings.active_format;
   applySelectedFormat();
   renderResultSummary();
+  renderSample();
+  updateConvertAction();
+  setupDialogA11y();
   makeDialogsDraggable();
+  loadRegistry().catch(() => {
+    const pill = el("registryPill");
+    if (pill) {
+      pill.textContent = "MNB tábla: nem elérhető";
+      pill.className = "status-pill warn";
+    }
+  });
 })();
 </script>
 </body>
