@@ -558,3 +558,89 @@ html.theme-dark .diff-body { background: var(--surface-2); }
 html.theme-dark .cmd-palette, html.theme-dark .dropzone { background:var(--surface-2); }
 html.theme-dark .field-help-btn { background:var(--surface-2); border-color:var(--ink-200); }
 html.theme-dark .row-highlight { background:rgba(217,119,6,.2) !important; }
+
+/* ============ Layout repair after redesign import ============ */
+.shell {
+  max-width: min(1680px, calc(100vw - 48px));
+}
+
+.commandbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.command-summary {
+  flex: 1 1 320px;
+  min-width: 280px;
+  max-width: 460px;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--ink-100);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.command-summary strong {
+  white-space: nowrap;
+}
+
+.command-summary #statusBox {
+  flex: 1 1 200px;
+  min-width: 180px;
+  line-height: 1.35;
+}
+
+.command-actions {
+  flex: 999 1 680px;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.command-actions > * {
+  flex: 0 0 auto;
+}
+
+.command-actions select#companySelect {
+  flex: 0 1 240px;
+}
+
+.layout {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 920px) {
+  .shell {
+    max-width: none;
+    padding-inline: var(--s-4);
+  }
+
+  .command-summary {
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .command-actions {
+    flex-basis: 100%;
+    justify-content: stretch;
+  }
+
+  .command-actions > *,
+  .command-actions select#companySelect {
+    flex: 1 1 calc(50% - var(--s-2));
+    min-width: 180px;
+  }
+
+  #convertBtn {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .command-actions > *,
+  .command-actions select#companySelect {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
